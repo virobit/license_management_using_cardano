@@ -3373,7 +3373,7 @@ class TestStatusIncludesSignatures:
         assert status["document_signature_count"] == 0
 
 
-# ── Task #368: Work Product Wallet Management Tests ──────────────
+# ── Work Product Wallet Management Tests ──────────────────────────
 
 
 class TestCreateWorkProductAutoWallet:
@@ -4022,7 +4022,7 @@ class TestWorkProductEndToEnd:
 
 
 # ── Plutus V2 Minting Policy Tests ─────────────────────────────
-# Task #370: Authority-only minting policy with CBOR serialization
+# Authority-only minting policy with CBOR serialization
 
 from pycardano import (
     TransactionBuilder,
@@ -5448,7 +5448,7 @@ class TestValidatorEndToEnd:
         assert restored.validity_expiry_slot == datum.validity_expiry_slot
 
 
-# ── Dues Enforcement Contract Tests (Task #372) ─────────────────
+# ── Dues Enforcement Contract Tests ──────────────────────────────
 
 def _make_dues_pkh(seed: int = 0) -> str:
     """Generate a test pubkey hash (28 bytes / 56 hex chars)."""

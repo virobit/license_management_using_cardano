@@ -95,7 +95,7 @@ from cardano_license.core import (
     list_dues_contracts,
     list_dues_payments,
     # Configuration & constants
-    MEMORY_DB,
+    LICENSE_DB,
     WALLET_DIR,
     POLICY_DIR,
     BLOCKFROST_PROJECT_ID,

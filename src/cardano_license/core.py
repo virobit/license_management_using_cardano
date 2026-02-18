@@ -1,6 +1,5 @@
 """Cardano License Module — PyCardano wallet management, chain interaction, NFT minting.
 
-Tasks: #363, #364, #365, #366, #367, #368, #370, #371, #372 (P-18, WS-CORE/WS-CONTRACTS)
 Created: 2026-02-16
 
 Features:
@@ -82,7 +81,7 @@ from blockfrost import ApiUrls
 
 from cardano_license.crypto import encrypt_key, decrypt_key
 from cardano_license.config import (
-    CARDANO_LICENSE_DB as MEMORY_DB,
+    CARDANO_LICENSE_DB as LICENSE_DB,
     WALLET_DIR,
     POLICY_DIR,
     BLOCKFROST_PROJECT_ID,
@@ -277,7 +276,7 @@ async def store_wallet_metadata(
         raise ValueError(f"Invalid wallet_type: {wallet_type}. Must be one of {WALLET_TYPES}")
 
     net = network or CARDANO_NETWORK
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             """INSERT INTO blockchain_wallets
@@ -294,7 +293,7 @@ async def store_wallet_metadata(
 
 async def get_wallet_by_label(label: str) -> Optional[Dict[str, Any]]:
     """Look up wallet metadata by label."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             "SELECT * FROM blockchain_wallets WHERE label = ?", (label,)
@@ -305,7 +304,7 @@ async def get_wallet_by_label(label: str) -> Optional[Dict[str, Any]]:
 
 async def get_wallet_by_address(address: str) -> Optional[Dict[str, Any]]:
     """Look up wallet metadata by address."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             "SELECT * FROM blockchain_wallets WHERE address = ?", (address,)
@@ -319,7 +318,7 @@ async def list_wallets(
     network: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """List all stored wallets, optionally filtered by type or network."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         conditions = []
         params = []
@@ -939,7 +938,7 @@ async def register_minting_authority(
     policy_path = policy.save_policy(label)
 
     # Store policy metadata in DB
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         await db.execute("""
             INSERT OR REPLACE INTO blockchain_minting_policies
             (policy_id, authority_address, authority_pubkey_hash,
@@ -979,7 +978,7 @@ async def is_registered_authority(address: str) -> bool:
     Returns:
         True if the address is registered as an authority in the DB.
     """
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         row = await db.execute_fetchall(
             "SELECT 1 FROM blockchain_wallets WHERE address = ? AND wallet_type = 'authority'",
@@ -997,7 +996,7 @@ async def get_authority_policy(authority_address: str) -> Optional[Dict[str, Any
     Returns:
         Dict with policy_id, policy_cbor_hex, etc., or None if not found.
     """
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         rows = await db.execute_fetchall(
             "SELECT * FROM blockchain_minting_policies WHERE authority_address = ? ORDER BY created_at DESC LIMIT 1",
@@ -1014,7 +1013,7 @@ async def list_registered_authorities() -> List[Dict[str, Any]]:
     Returns:
         List of dicts with wallet and policy information.
     """
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         rows = await db.execute_fetchall("""
             SELECT w.address, w.public_key_hash, w.wallet_type, w.label,
@@ -1231,7 +1230,7 @@ async def _store_license_record(
 
     Returns the license row ID.
     """
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         cursor = await db.execute(
             """INSERT INTO blockchain_licenses
                (token_name, policy_id, licensee_address, authority_address,
@@ -1256,7 +1255,7 @@ async def _store_license_record(
 
 async def get_license_by_id(license_id: int) -> Optional[Dict[str, Any]]:
     """Look up a license record by ID."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             "SELECT * FROM blockchain_licenses WHERE id = ?", (license_id,)
@@ -1267,7 +1266,7 @@ async def get_license_by_id(license_id: int) -> Optional[Dict[str, Any]]:
 
 async def get_license_by_tx_hash(tx_hash: str) -> Optional[Dict[str, Any]]:
     """Look up a license record by mint transaction hash."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             "SELECT * FROM blockchain_licenses WHERE mint_tx_hash = ?", (tx_hash,)
@@ -1282,7 +1281,7 @@ async def list_licenses(
     status: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """List license records with optional filters."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         conditions = []
         params = []
@@ -1456,7 +1455,7 @@ async def _store_signature_token_record(
 
     Returns the token row ID.
     """
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         cursor = await db.execute(
             """INSERT INTO blockchain_signature_tokens
                (policy_id, token_name, licensee_address, license_ref,
@@ -1494,7 +1493,7 @@ async def get_signature_balance(
 
     address = wallet["address"]
 
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
 
         if license_type:
@@ -1585,7 +1584,7 @@ async def transfer_signature_token(
     sender_address = sender_keys["base_address"]
 
     # Get the token details from DB
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             """SELECT * FROM blockchain_signature_tokens
@@ -1678,7 +1677,7 @@ async def _record_signature_transfer(
     Deducts quantity from source records (marking depleted ones as 'transferred'),
     and creates a new record for the recipient.
     """
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         remaining = quantity
 
         for rec in source_records:
@@ -1718,7 +1717,7 @@ async def _record_signature_transfer(
 
 async def get_signature_token_by_id(token_id: int) -> Optional[Dict[str, Any]]:
     """Look up a signature token record by ID."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             "SELECT * FROM blockchain_signature_tokens WHERE id = ?", (token_id,)
@@ -1733,7 +1732,7 @@ async def list_signature_tokens(
     status: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """List signature token records with optional filters."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         conditions = []
         params = []
@@ -1770,7 +1769,7 @@ def _generate_validity_token_name(license_ref: int, seq: int = 0) -> str:
 
 async def _get_next_validity_seq(license_ref: int) -> int:
     """Get the next sequence number for a validity token for a given license."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         cursor = await db.execute(
             "SELECT COUNT(*) FROM blockchain_validity_tokens WHERE license_ref = ?",
             (license_ref,),
@@ -1918,7 +1917,7 @@ async def _store_validity_token_record(
 
     Returns the token row ID.
     """
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         cursor = await db.execute(
             """INSERT INTO blockchain_validity_tokens
                (policy_id, token_name, licensee_address, license_ref,
@@ -1949,7 +1948,7 @@ async def check_validity(
     """
     now = datetime.now().strftime("%Y-%m-%d")
 
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
 
         # Find the most recent active validity token for this license+address
@@ -2053,7 +2052,7 @@ async def _expire_active_validity_tokens(
 
     Returns the ID of the most recently expired token, or None if none found.
     """
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         # Find current active token ID before expiring
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
@@ -2084,7 +2083,7 @@ async def _expire_active_validity_tokens(
 
 async def get_validity_token_by_id(token_id: int) -> Optional[Dict[str, Any]]:
     """Look up a validity token record by ID."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             "SELECT * FROM blockchain_validity_tokens WHERE id = ?", (token_id,)
@@ -2099,7 +2098,7 @@ async def list_validity_tokens(
     status: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """List validity token records with optional filters."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         conditions = []
         params = []
@@ -2138,7 +2137,7 @@ async def revoke_validity_token(token_id: int) -> Dict[str, Any]:
             f"Cannot revoke token {token_id}: status is '{token['status']}', must be 'active'"
         )
 
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         await db.execute(
             "UPDATE blockchain_validity_tokens SET status = 'revoked' WHERE id = ?",
             (token_id,),
@@ -2224,7 +2223,7 @@ async def sign_document(
     signer_vk = signer_keys["payment_vk"]
 
     # Get token details from DB for the signature token
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             """SELECT * FROM blockchain_signature_tokens
@@ -2331,7 +2330,7 @@ async def sign_document(
 
 async def _consume_signature_token(token_id: int, tx_hash: str) -> None:
     """Deduct one signature token from a DB record (or mark transferred if qty reaches 0)."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             "SELECT quantity FROM blockchain_signature_tokens WHERE id = ?", (token_id,)
@@ -2367,7 +2366,7 @@ async def _store_signature_record(
 
     Returns the signature row ID.
     """
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         cursor = await db.execute(
             """INSERT INTO blockchain_signatures
                (document_hash, signer_address, license_ref,
@@ -2391,7 +2390,7 @@ async def _update_work_product_signatures(
     signature_id: int,
 ) -> None:
     """Update work product collected_signatures if a matching work product exists."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             "SELECT * FROM blockchain_work_products WHERE document_hash = ?",
@@ -2452,7 +2451,7 @@ async def verify_signature(
     if not document_hash:
         raise ValueError("document_hash must be non-empty")
 
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
 
         # Find all signatures for this document hash
@@ -2514,7 +2513,7 @@ async def verify_signature(
     # Mark signatures as verified
     if is_verified:
         now = datetime.now().isoformat()
-        async with aiosqlite.connect(MEMORY_DB) as db:
+        async with aiosqlite.connect(LICENSE_DB) as db:
             for sig in sig_rows:
                 if not sig.get("verified_at"):
                     await db.execute(
@@ -2591,7 +2590,7 @@ async def create_work_product(
             f"address={wp_address[:32]}..."
         )
 
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         cursor = await db.execute(
             """INSERT INTO blockchain_work_products
                (title, wp_address, document_hash, required_signers_json, status)
@@ -2639,7 +2638,7 @@ async def get_work_product_status(
     if work_product_id is None and not wp_address:
         raise ValueError("Must provide work_product_id or wp_address")
 
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
 
         if work_product_id is not None:
@@ -2768,7 +2767,7 @@ async def finalize_work_product(
 
     # Mark as finalized
     finalized_at = datetime.now().isoformat()
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         await db.execute(
             """UPDATE blockchain_work_products
                SET status = 'finalized', finalized_at = ?
@@ -2807,7 +2806,7 @@ async def list_work_products(
     Returns:
         List of work product dicts with signature progress.
     """
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         conditions = []
         params = []
@@ -2851,7 +2850,7 @@ async def list_work_products(
 
 async def get_signature_by_id(signature_id: int) -> Optional[Dict[str, Any]]:
     """Look up a signature record by ID."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             "SELECT * FROM blockchain_signatures WHERE id = ?", (signature_id,)
@@ -2866,7 +2865,7 @@ async def list_signatures(
     license_ref: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """List signature records with optional filters."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         conditions = []
         params = []
@@ -3389,7 +3388,7 @@ async def deploy_signature_validator(
     validator.save_validator(validator_label)
 
     # Store validator metadata in DB
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         await db.execute(
             """UPDATE blockchain_work_products
                SET validator_address = ?, validator_script_hash = ?
@@ -3496,7 +3495,7 @@ async def check_finalization_ready(work_product_id: int) -> Dict[str, Any]:
     return details
 
 
-# ── Dues Enforcement Contract (Task #372) ────────────────────────
+# ── Dues Enforcement Contract ─────────────────────────────────────
 
 # PlutusData types for dues enforcement redeemers
 
@@ -4002,7 +4001,7 @@ async def _store_dues_contract(
 
     Returns the contract row ID.
     """
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         cursor = await db.execute(
             """INSERT INTO dues_contracts
                (authority_address, authority_pkh, license_ref, annual_dues_lovelace,
@@ -4114,7 +4113,7 @@ async def _store_dues_payment(
 
     Returns the payment row ID.
     """
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         cursor = await db.execute(
             """INSERT INTO dues_payments
                (contract_id, payer_address, amount_lovelace, payment_tx_hash,
@@ -4151,7 +4150,7 @@ async def revoke_dues_validity(
     license_ref = contract_record["license_ref"]
 
     # Suspend the contract
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         await db.execute(
             """UPDATE dues_contracts
                SET status = 'suspended', updated_at = datetime('now'),
@@ -4183,7 +4182,7 @@ async def revoke_dues_validity(
 
 async def get_dues_contract(contract_id: int) -> Optional[Dict[str, Any]]:
     """Look up a dues contract by ID."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             "SELECT * FROM dues_contracts WHERE id = ?", (contract_id,)
@@ -4194,7 +4193,7 @@ async def get_dues_contract(contract_id: int) -> Optional[Dict[str, Any]]:
 
 async def get_dues_contract_for_license(license_ref: int) -> Optional[Dict[str, Any]]:
     """Look up the active dues contract for a license."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             """SELECT * FROM dues_contracts
@@ -4211,7 +4210,7 @@ async def list_dues_contracts(
     authority_address: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """List dues contracts with optional filters."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         conditions = []
         params = []
@@ -4237,7 +4236,7 @@ async def list_dues_payments(
     status: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """List dues payments with optional filters."""
-    async with aiosqlite.connect(MEMORY_DB) as db:
+    async with aiosqlite.connect(LICENSE_DB) as db:
         db.row_factory = aiosqlite.Row
         conditions = []
         params = []

@@ -1,6 +1,5 @@
 """Tests for cardano_tx_utils module.
 
-Task: #373 (P-18, WS-CONTRACTS)
 Tests: Fee estimation, UTxO selection, build_mint_tx, build_transfer_tx,
        build_multisig_tx, submit_tx, wait_for_confirmation, convenience functions.
 """

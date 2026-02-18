@@ -38,7 +38,7 @@ else:
 import cardano_license.core as _core  # noqa: E402
 
 # Reconcile: force the module attributes to match our TEST_DIR.
-_core.MEMORY_DB = TEST_DB
+_core.LICENSE_DB = TEST_DB
 _core.WALLET_DIR = TEST_WALLET_DIR
 _core.POLICY_DIR = TEST_POLICY_DIR
 
@@ -50,7 +50,7 @@ TEST_POLICY_DIR.mkdir(parents=True, exist_ok=True)
 @pytest.fixture(autouse=True)
 def patch_paths():
     """Keep core module vars pointing at test paths for each test."""
-    _core.MEMORY_DB = TEST_DB
+    _core.LICENSE_DB = TEST_DB
     _core.WALLET_DIR = TEST_WALLET_DIR
     _core.POLICY_DIR = TEST_POLICY_DIR
     yield

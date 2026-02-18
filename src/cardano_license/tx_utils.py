@@ -1,6 +1,5 @@
 """Cardano Transaction Builder Utilities.
 
-Task: #373 (P-18, WS-CONTRACTS)
 Created: 2026-02-16
 
 Transaction building helpers for the Cardano License & Signature system:
@@ -47,7 +46,7 @@ from cardano_license.core import (
     get_chain_context,
     load_wallet_keys,
     _get_network,
-    MEMORY_DB,
+    LICENSE_DB,
 )
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,5 @@
 """End-to-end integration tests on Cardano preprod testnet.
 
-Task: #380 (P-18, WS-TESTING)
 Created: 2026-02-16
 
 Tests:
@@ -54,7 +53,7 @@ pytestmark = [
 # ── Test isolation: use temp dir for DB + wallets ────────────────
 
 TEST_DIR = tempfile.mkdtemp(prefix="cardano_testnet_")
-TEST_DB = os.path.join(TEST_DIR, "test_memory.db")
+TEST_DB = os.path.join(TEST_DIR, "test_license.db")
 TEST_WALLET_DIR = Path(TEST_DIR) / "wallets"
 
 os.environ["CARDANO_NETWORK"] = "testnet"
@@ -70,7 +69,7 @@ MIN_FUNDING_LOVELACE = 10_000_000  # 10 tADA needed to run tests
 @pytest.fixture(autouse=True)
 def patch_paths(monkeypatch):
     """Redirect DB and wallet dir to temp paths for test isolation."""
-    monkeypatch.setattr("cardano_license.core.MEMORY_DB", TEST_DB)
+    monkeypatch.setattr("cardano_license.core.LICENSE_DB", TEST_DB)
     monkeypatch.setattr("cardano_license.core.WALLET_DIR", TEST_WALLET_DIR)
 
 

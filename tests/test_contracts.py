@@ -1,6 +1,5 @@
 """Tests for Cardano smart contract logic.
 
-Task: #379 (P-18, WS-TESTING/WS-75)
 Tests: Minting policy validation (authorized vs unauthorized),
        signature validator logic (valid/expired/missing tokens),
        dues enforcement (paid/unpaid/partial),
