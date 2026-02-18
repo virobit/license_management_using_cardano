@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cardano-license"
+version = "2.0.0"
+description = "Professional credential verification on Cardano using NFT-based licenses, signature tokens, and Plutus V2 smart contracts."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "virobit" },
+]
+keywords = ["cardano", "blockchain", "license", "nft", "credential", "pycardano"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security :: Cryptography",
+]
+dependencies = [
+    "pycardano>=0.11.0",
+    "blockfrost-python>=0.6.0",
+    "aiosqlite>=0.19.0",
+    "cryptography>=41.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+]
+
+[project.scripts]
+cardano-license = "cardano_license.core:_cli_entry"
+
+[project.urls]
+Homepage = "https://github.com/virobit/license_management_using_cardano"
+Repository = "https://github.com/virobit/license_management_using_cardano"
+Issues = "https://github.com/virobit/license_management_using_cardano/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
