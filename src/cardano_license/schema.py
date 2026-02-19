@@ -114,6 +114,24 @@ CREATE TABLE IF NOT EXISTS blockchain_minting_policies (
     deactivated_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS blockchain_reference_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    license_id INTEGER NOT NULL,
+    policy_id TEXT NOT NULL,
+    user_token_name TEXT NOT NULL,
+    ref_token_name TEXT NOT NULL,
+    authority_address TEXT NOT NULL,
+    licensee_address TEXT NOT NULL,
+    datum_json JSON NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN (
+        'active', 'revoked', 'suspended', 'expired'
+    )),
+    mint_tx_hash TEXT,
+    last_update_tx_hash TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS dues_contracts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     authority_address TEXT NOT NULL,

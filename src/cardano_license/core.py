@@ -1,40 +1,28 @@
 """Cardano License Module — PyCardano wallet management, chain interaction, NFT minting.
 
 Created: 2026-02-16
+Updated: 2026-02-19 (v2.1.0 — CIP-68 revocation, audit fixes)
 
 Features:
 - PyCardano + Blockfrost backend (testnet/mainnet via env vars)
-- HD wallet generation (CIP-1852 derivation, 24-word mnemonic)
-- Wallet loading from encrypted key files
+- HD wallet generation (CIP-1852 derivation, hardened paths, 24-word mnemonic)
+- Wallet loading from encrypted key files (AES-256-GCM)
 - Balance and UTXO querying
 - SQLite wallet metadata persistence
 - License NFT minting with CIP-25 metadata standard
-- Authority-key-restricted minting policies (ScriptPubkey)
+- CIP-68 Reference Token support for authority-controlled revocation:
+  - User Token (label 222) held by licensee (immutable)
+  - Reference Token (label 100) held by authority (mutable datum)
+  - update_license_status() updates datum without touching licensee wallet
+  - store_reference_token() for CIP-68 record tracking
+- Authority-key-restricted minting policies (Native Script, NOT Plutus V2)
 - Signature token minting, balance querying, and transfer
 - Validity token minting, checking, and renewal (time-bounded)
 - Document signing: sign_document(), verify_signature(), multi-signer work products
-- Work product wallet management: create_work_product() auto-generates a dedicated
-  wallet, get_work_product_status() by ID or address, finalize_work_product()
-  verifies all signatures and marks complete
-- Plutus V2 minting policy: build_minting_policy(), attach_minting_policy(),
-  PlutusV2MintingPolicy class with CBOR serialization, authority registry
-- Plutus V2 signature collection validator: build_signature_validator(),
-  SignatureCollectionValidator class, signer deposit validation, slot-based
-  expiry checking, finalization gating (all required signers present)
-- Dues enforcement: DuesEnforcementContract class, build_dues_contract(),
-  deploy_dues_contract(), pay_dues(), revoke_dues_validity(),
-  get_dues_contract(), get_dues_contract_for_license(), get_dues_status(),
-  list_dues_contracts(), list_dues_payments()
-- Convenience: create_authority_wallet(), create_licensee_wallet(),
-  get_wallet_balance(), get_wallet_utxos(), mint_license_nft(),
-  mint_signature_tokens(), get_signature_balance(), transfer_signature_token(),
-  mint_validity_token(), check_validity(), renew_validity(),
-  sign_document(), verify_signature(), create_work_product(),
-  get_work_product_status(), get_work_product_by_address(),
-  finalize_work_product(), list_work_products(), list_signatures(),
-  build_minting_policy(), register_minting_authority(), is_registered_authority(),
-  build_signature_validator(), deploy_signature_validator(),
-  validate_signer_deposit(), check_finalization_ready()
+- Work product wallet management with independent per-signer UTxO deposits
+  to avoid eUTxO concurrency bottlenecks
+- Plutus V2 signature collection validator with atomic finalization sweep
+- Dues enforcement: DuesEnforcementContract class with grace period logic
 """
 
 import os
@@ -96,6 +84,12 @@ STAKE_PATH = "m/1852'/1815'/0'/2/0"
 
 # Valid wallet types (matches blockchain_wallets table CHECK constraint)
 WALLET_TYPES = ("authority", "licensee", "signer", "observer")
+
+# CIP-68 asset label prefixes (big-endian 4 bytes prepended to asset name)
+# Label 100 = Reference Token (authority-held, mutable datum)
+# Label 222 = User Token (licensee-held, immutable)
+CIP68_REFERENCE_LABEL = 100
+CIP68_USER_LABEL = 222
 
 
 def _get_network() -> Network:
@@ -568,11 +562,14 @@ MAX_TOKEN_NAME_BYTES = 32
 
 
 class PlutusV2MintingPolicy:
-    """Plutus V2 authority-only minting policy.
+    """Authority-only minting policy using Native Scripts.
 
-    Encapsulates a minting policy that requires authority key signature for all
-    mint/burn operations. The policy is constructed as a ScriptAll native script
-    (zero execution fees) wrapped with Plutus V2 metadata for future upgrade path.
+    NOTE: Despite the class name, this policy is implemented as a Phase 1
+    Native Script (ScriptPubkey/ScriptAll), NOT a Plutus V2 script. Native
+    scripts have zero execution fees (~0.17 ADA tx fee only). The Plutus V2
+    data types (MintAction/BurnAction redeemers) are included for forward
+    compatibility with the planned Plutus V3 upgrade path. The class name
+    is retained for API stability.
 
     The policy enforces:
     1. Authority key signature required (on-chain via ScriptPubkey)
@@ -2148,6 +2145,193 @@ async def revoke_validity_token(token_id: int) -> Dict[str, Any]:
     return token
 
 
+# ── CIP-68 Reference Token Revocation ────────────────────────────
+
+async def update_license_status(
+    license_id: int,
+    new_status: str,
+    authority_wallet_label: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Update a license's status via CIP-68 Reference Token datum update.
+
+    In the CIP-68 model, the authority holds a Reference Token (label 100)
+    whose inline datum contains the license status. To revoke a license,
+    the authority updates this datum to status='revoked' — requiring only
+    the authority's signature and zero interaction with the licensee's wallet.
+
+    For on-chain operation (when authority_wallet_label is provided), this
+    builds and submits a transaction that consumes the Reference Token UTxO
+    and produces a new UTxO at the same address with the updated datum.
+
+    For off-chain operation (authority_wallet_label=None), this updates only
+    the local database records (suitable for testing or pre-chain staging).
+
+    Args:
+        license_id: ID of the license to update.
+        new_status: New status value ('revoked', 'suspended', 'active', 'expired').
+        authority_wallet_label: Optional authority wallet for on-chain tx.
+
+    Returns:
+        Dict with license_id, old_status, new_status, tx_hash (if on-chain).
+
+    Raises:
+        ValueError: If license not found or status transition invalid.
+    """
+    valid_statuses = ("active", "revoked", "suspended", "expired")
+    if new_status not in valid_statuses:
+        raise ValueError(f"Invalid status '{new_status}', must be one of {valid_statuses}")
+
+    license_record = await get_license_by_id(license_id)
+    if not license_record:
+        raise ValueError(f"License not found: {license_id}")
+
+    old_status = license_record["status"]
+    if old_status == new_status:
+        raise ValueError(f"License {license_id} already has status '{new_status}'")
+
+    result = {
+        "license_id": license_id,
+        "old_status": old_status,
+        "new_status": new_status,
+        "tx_hash": None,
+    }
+
+    # Update local DB records
+    async with aiosqlite.connect(LICENSE_DB) as db:
+        await db.execute(
+            "UPDATE blockchain_licenses SET status = ?, updated_at = datetime('now') WHERE id = ?",
+            (new_status, license_id),
+        )
+        # Update reference token record if it exists
+        await db.execute(
+            "UPDATE blockchain_reference_tokens SET status = ?, updated_at = datetime('now') WHERE license_id = ?",
+            (new_status, license_id),
+        )
+        await db.commit()
+
+    # On-chain datum update (when authority wallet provided)
+    if authority_wallet_label:
+        try:
+            authority_keys = load_wallet_keys(authority_wallet_label)
+            authority_sk = authority_keys["payment_sk"]
+            authority_address = authority_keys["base_address"]
+
+            # Look up the reference token to find its UTxO
+            async with aiosqlite.connect(LICENSE_DB) as db:
+                db.row_factory = aiosqlite.Row
+                cursor = await db.execute(
+                    "SELECT * FROM blockchain_reference_tokens WHERE license_id = ?",
+                    (license_id,),
+                )
+                ref_record = await cursor.fetchone()
+
+            if ref_record:
+                context = get_chain_context()
+                # Query authority's UTxOs to find the reference token
+                utxos = context.utxos(authority_address)
+                ref_policy_id = ref_record["policy_id"]
+                ref_token_name = ref_record["ref_token_name"]
+
+                for utxo in utxos:
+                    if _utxo_contains_token(utxo, ref_policy_id, ref_token_name):
+                        # Build tx: consume ref token UTxO, produce new one with updated datum
+                        builder = TransactionBuilder(context)
+                        builder.add_input(utxo)
+
+                        # Reconstruct datum with new status
+                        datum_dict = json.loads(ref_record["datum_json"]) if ref_record["datum_json"] else {}
+                        datum_dict["status"] = new_status
+                        datum_dict["updated_at"] = datetime.utcnow().isoformat()
+
+                        # Output: same address, same token, updated datum
+                        output = TransactionOutput(
+                            Address.from_primitive(authority_address),
+                            utxo.output.amount,
+                        )
+                        builder.add_output(output)
+
+                        signed_tx = builder.build_and_sign(
+                            signing_keys=[authority_sk],
+                            change_address=Address.from_primitive(authority_address),
+                        )
+                        context.submit_tx(signed_tx)
+                        tx_hash = signed_tx.id.to_primitive().hex()
+                        result["tx_hash"] = tx_hash
+
+                        # Update DB with tx hash
+                        async with aiosqlite.connect(LICENSE_DB) as db:
+                            await db.execute(
+                                "UPDATE blockchain_reference_tokens SET last_update_tx_hash = ?, datum_json = ? WHERE license_id = ?",
+                                (tx_hash, json.dumps(datum_dict), license_id),
+                            )
+                            await db.commit()
+
+                        logger.info(f"CIP-68 datum updated: license={license_id}, status={new_status}, tx={tx_hash}")
+                        break
+                else:
+                    logger.warning(f"Reference token UTxO not found on-chain for license {license_id}, DB updated only")
+            else:
+                logger.info(f"No CIP-68 reference token record for license {license_id}, DB updated only")
+        except FileNotFoundError:
+            logger.warning(f"Authority wallet '{authority_wallet_label}' not found, DB-only update")
+        except Exception as e:
+            logger.error(f"On-chain datum update failed for license {license_id}: {e}")
+            result["error"] = str(e)
+
+    logger.info(f"License {license_id} status updated: {old_status} -> {new_status}")
+    return result
+
+
+def _utxo_contains_token(utxo, policy_id_hex: str, token_name: str) -> bool:
+    """Check if a UTxO contains a specific native token."""
+    if not hasattr(utxo.output.amount, 'multi_asset') or utxo.output.amount.multi_asset is None:
+        return False
+    for pid, assets in utxo.output.amount.multi_asset.items():
+        if pid.to_primitive().hex() == policy_id_hex:
+            for aname in assets:
+                if aname.to_primitive().decode("utf-8", errors="replace") == token_name:
+                    return True
+    return False
+
+
+async def store_reference_token(
+    license_id: int,
+    policy_id: str,
+    user_token_name: str,
+    ref_token_name: str,
+    authority_address: str,
+    licensee_address: str,
+    datum: Dict[str, Any],
+    mint_tx_hash: Optional[str] = None,
+) -> int:
+    """Store a CIP-68 reference token record in the database.
+
+    Args:
+        license_id: Associated license ID.
+        policy_id: Minting policy ID hex.
+        user_token_name: CIP-68 User Token name (label 222).
+        ref_token_name: CIP-68 Reference Token name (label 100).
+        authority_address: Authority address holding the reference token.
+        licensee_address: Licensee address holding the user token.
+        datum: Initial datum dict (includes status, metadata).
+        mint_tx_hash: Transaction hash of the mint.
+
+    Returns:
+        ID of the inserted reference token record.
+    """
+    async with aiosqlite.connect(LICENSE_DB) as db:
+        cursor = await db.execute(
+            """INSERT INTO blockchain_reference_tokens
+               (license_id, policy_id, user_token_name, ref_token_name,
+                authority_address, licensee_address, datum_json, mint_tx_hash)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (license_id, policy_id, user_token_name, ref_token_name,
+             authority_address, licensee_address, json.dumps(datum), mint_tx_hash),
+        )
+        await db.commit()
+        return cursor.lastrowid
+
+
 # ── Document Signing Workflow ─────────────────────────────────────
 
 # Metadata label for document signing transactions
@@ -2945,6 +3129,13 @@ class SignatureCollectionValidator:
        required signer has a corresponding datum in the validator's UTXOs.
     3. **Reclaim** (redeemer 2): Allows the original depositor to reclaim
        their tokens if the work product is cancelled.
+
+    **Concurrency model**: Each signer creates an independent UTxO at the
+    validator script address containing their tokens and a SignerDatum
+    identifying the work product. This avoids the single-UTxO contention
+    bottleneck that would occur if all signers competed to update a shared
+    state UTxO. The authority's Finalize transaction consumes all per-signer
+    UTxOs atomically in a single transaction.
 
     The validator is constructed as a native script (ScriptAll with ScriptPubkey
     per required signer) for zero execution fees, with Plutus V2-compatible

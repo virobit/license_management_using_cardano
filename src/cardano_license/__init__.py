@@ -4,7 +4,7 @@ NFT-based licenses, signature tokens, validity tokens, and Plutus V2
 smart contracts for professional credential management.
 """
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 # ── Core: wallets, chain, minting ────────────────────────────────
 
@@ -59,6 +59,11 @@ from cardano_license.core import (
     revoke_validity_token,
     get_validity_token_by_id,
     list_validity_tokens,
+    # CIP-68 Reference Token revocation
+    update_license_status,
+    store_reference_token,
+    CIP68_REFERENCE_LABEL,
+    CIP68_USER_LABEL,
     # Document signing & work products
     sign_document,
     verify_signature,
@@ -187,6 +192,11 @@ __all__ = [
     "revoke_validity_token",
     "get_validity_token_by_id",
     "list_validity_tokens",
+    # CIP-68 revocation
+    "update_license_status",
+    "store_reference_token",
+    "CIP68_REFERENCE_LABEL",
+    "CIP68_USER_LABEL",
     # Documents
     "sign_document",
     "verify_signature",

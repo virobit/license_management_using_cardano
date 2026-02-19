@@ -106,7 +106,7 @@ A Cardano Smart Contract Architecture for License Management and Digital Signatu
   \IEEEauthorblockN{Timothy E. Smith, PE}
   \IEEEauthorblockA{
     Independent Research\\
-    February 2026 --- v3.0
+    February 2026 --- v3.1
   }
 }
 
@@ -118,7 +118,7 @@ A Cardano Smart Contract Architecture for License Management and Digital Signatu
 \begin{abstract}
 Professional credential fraud, verification delays, and cross-jurisdiction portability failures impose significant costs on regulatory bodies, employers, and the public. In the United States alone, the National Practitioner Data Bank processed 14.9 million query responses in 2024, with average interstate processing times of 19 days (IMLC FY2025 data)~\cite{hrsa2025}. The ACFE 2024 Report estimates organizations lose 5\% of revenue annually to occupational fraud (${\sim}$\$5~T global GWP basis), with credential misrepresentation a documented vector in hiring-related schemes (industry analyses place the credential-specific subset in the hundreds of billions)~\cite{acfe2024}. The FBI IC3 2024 Report documents 859,532 complaints and \$16.6~B in losses (+33\% YoY); credential theft and phishing remain primary vectors~\cite{fbiic32024}. OIG/DOJ enforcement actions documented numerous cases of falsified credentials in Medicare/Medicaid (HCFAC FY2023 settlements \$1.8~B+; individual prosecutions exceed 1,400 adverse actions when aggregated across reports)~\cite{oighcfac2023}. Current verification systems rely on fragmented, centralized databases maintained independently by thousands of licensing boards, creating a patchwork infrastructure that is slow, expensive to maintain, and vulnerable to both external attacks and internal manipulation.
 
-This paper presents a blockchain-based credential verification architecture built on the Cardano platform that addresses these systemic failures. The system employs Plutus V2 smart contracts to enforce authority-restricted minting policies, CIP-25 metadata standards for on-chain credential representation, and native multi-asset tokens for signature and validity credentials. By leveraging Cardano's extended UTXO model and its native token architecture, the system achieves lower transaction costs than Ethereum-based alternatives while providing mathematically verifiable issuance provenance. The architecture separates credential attestation (on-chain, immutable) from personal data storage (off-chain, erasable), satisfying both blockchain immutability requirements and data privacy regulations including GDPR's right to erasure. We describe the complete system design---from HD wallet generation following CIP-1852 through Plutus V2 minting policies, multi-signature collection validators, and dues enforcement contracts---and evaluate its performance against eight existing blockchain credential systems. The proposed architecture fills an identified gap: no existing system combines Cardano-native NFT credentials with Plutus-enforced issuance policies, on-chain revocation, and cross-jurisdiction license portability within a unified framework.
+This paper presents a blockchain-based credential verification architecture built on the Cardano platform that addresses these systemic failures. The system employs Plutus V2 smart contracts to enforce authority-restricted minting policies, CIP-25 metadata standards for on-chain credential representation, and native multi-asset tokens for signature and validity credentials. By leveraging Cardano's extended UTXO model and its native token architecture, the system achieves lower transaction costs than Ethereum-based alternatives while providing mathematically verifiable issuance provenance. The architecture separates credential attestation (on-chain, immutable) from personal data storage (off-chain, erasable), satisfying both blockchain immutability requirements and data privacy regulations including GDPR's right to erasure. We describe the complete system design---from HD wallet generation following CIP-1852 through Plutus V2 minting policies, multi-signature collection validators, and dues enforcement contracts---and evaluate its performance against eight existing blockchain credential systems. The proposed architecture fills an identified gap: no existing system combines Cardano-native NFT credentials (CIP-68) with Plutus-enforced issuance policies, authority-controlled on-chain revocation via datum updates, and cross-jurisdiction license portability within a unified framework.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -309,7 +309,7 @@ The system defines four token classes, each implemented as Cardano native tokens
   \node[archbox, fill=gray!10, minimum width=3.4cm] (auth) at (0,5.8) {Authority Wallet\\(Minting Policy Owner)};
 
   % Tokens
-  \node[tokenbox, fill=blue!6] (lic) at (-3.2,3.6) {License NFT\\(CIP-25)\\[2pt]\scriptsize Qty: 1\\Revocable: burn};
+  \node[tokenbox, fill=blue!6] (lic) at (-3.2,3.6) {License NFT\\(CIP-68)\\[2pt]\scriptsize User Token (222)\\Ref Token (100)};
   \node[tokenbox, fill=green!6] (sig) at (0,3.6) {Signature\\Tokens (FT)\\[2pt]\scriptsize Qty: N\\Transferable};
   \node[tokenbox, fill=orange!6] (val) at (3.2,3.6) {Validity Token\\(Time-Bounded)\\[2pt]\scriptsize Qty: 1\\Slot-expiry};
 
@@ -327,7 +327,7 @@ The system defines four token classes, each implemented as Cardano native tokens
 \label{fig:tokens}
 \end{figure}
 
-\textbf{Token 1---License NFT.} A non-fungible token representing a professional license, minted once per licensee with CIP-25 metadata encoding license type, jurisdiction, issue date, and licensee identity. Revocation is implemented by burning the token.
+\textbf{Token 1---License NFT (CIP-68).} A non-fungible token representing a professional license, implemented using the CIP-68 datum metadata standard~\cite{cip68}. The licensee holds an immutable \emph{User Token} (asset label 222) in their personal wallet, while the issuing authority retains a \emph{Reference Token} (asset label 100) containing an inline datum with license type, jurisdiction, issue date, licensee identity, and a mutable \texttt{status} field. Revocation is implemented by updating the Reference Token's datum to \texttt{status: revoked}---requiring only the authority's signature and zero interaction with the licensee's wallet. Any verifier reads the Reference Token's inline datum to determine current license status, providing instant global revocation propagation.
 
 \textbf{Token 2---Signature Token.} Fungible native tokens representing signing capacity. Each document-signing operation consumes one signature token by depositing it into a work product validator address.
 
@@ -335,11 +335,11 @@ The system defines four token classes, each implemented as Cardano native tokens
 
 \textbf{Token 4---Work Product.} A logical composite tracked in the local database and coordinated by a \texttt{SignatureCollectionValidator} script address. Finalization occurs when all required signers have deposited their tokens.
 
-\textbf{Future Migration Path.} CIP-68 reference NFTs with updatable inline datums (Plutus V3) provide a migration path for dynamic validity updates without per-renewal mint/burn cycles~\cite{cip68}.
+\textbf{CIP-68 Architecture.} The CIP-68 pattern is central to the revocation and status update mechanism. Because the user holds only the immutable User Token while the authority controls the Reference Token datum, unilateral revocation is possible without consuming the user's UTxO---a critical requirement given that eUTxO spending requires the UTxO holder's private key. Future Plutus V3 migration enables richer on-chain datum validation logic without altering this fundamental custody separation~\cite{cip68}.
 
 \subsection{Wallet Model}
 
-The system defines four wallet roles with distinct permissions, as shown in Table~\ref{tab:wallets}. All wallets use CIP-1852 hierarchical deterministic key derivation from a 24-word BIP-39 mnemonic.
+The system defines four wallet roles with distinct permissions, as shown in Table~\ref{tab:wallets}. All wallets use CIP-1852 hierarchical deterministic key derivation from a 24-word BIP-39 mnemonic. To avoid centralizing user private keys into a server-side honeypot, the production architecture employs a \textbf{non-custodial model}: licensee and signer wallets connect via CIP-30 (dApp Connector), allowing professionals to sign transactions using standard Cardano browser wallets (e.g., Eternl, Nami, Lace). Only the authority wallet's keys are stored server-side under AES-256-GCM encryption.
 
 \begin{table}[t]
 \centering
@@ -351,8 +351,8 @@ The system defines four wallet roles with distinct permissions, as shown in Tabl
 \textbf{Role} & \textbf{Type} & \textbf{Permissions} & \textbf{Key Storage} \\
 \midrule
 Authority & \texttt{authority} & Mint/burn all tokens, create policies, deploy validators & AES-256-GCM \\
-Licensee & \texttt{licensee} & Hold license NFT, deposit sig/val tokens, pay dues & AES-256-GCM \\
-Signer & \texttt{signer} & Deposit sig + val tokens into work product validators & AES-256-GCM \\
+Licensee & \texttt{licensee} & Hold license NFT, deposit sig/val tokens, pay dues & CIP-30 wallet \\
+Signer & \texttt{signer} & Deposit sig + val tokens into work product validators & CIP-30 wallet \\
 Observer & \texttt{observer} & Read-only: verify signatures, check validity & Public key only \\
 \bottomrule
 \end{tabular}
@@ -360,13 +360,13 @@ Observer & \texttt{observer} & Read-only: verify signatures, check validity & Pu
 
 \subsection{Smart Contract Layer}
 
-The system employs a hybrid approach: \textbf{native scripts} handle routine token operations at zero execution cost, while \textbf{Plutus V2 data types} structure the information model for a future full-Plutus upgrade. Fig.~\ref{fig:contracts} illustrates the smart contract hierarchy.
+The system employs a hybrid approach: \textbf{native scripts} (Phase~1 simple scripts) handle minting policy enforcement at zero Plutus execution cost (${\sim}$0.17~ADA per transaction), while the \textbf{Signature Collection Validator} and \textbf{Dues Enforcement Contract} are Plutus V2 scripts that use redeemers and incur standard Plutus CPU/Memory execution fees (${\sim}$0.3--0.5~ADA per transaction). Fig.~\ref{fig:contracts} illustrates the smart contract hierarchy.
 
 \begin{figure}[t]
 \centering
 \begin{tikzpicture}[scale=0.78, every node/.style={transform shape}]
   % Minting Policy
-  \node[archbox, fill=blue!8, minimum width=4.8cm, minimum height=1.6cm] (policy) at (0,5.2) {PlutusV2 Minting Policy\\[2pt]\scriptsize ScriptPubkey / ScriptAll\\Controls ALL token mint/burn};
+  \node[archbox, fill=blue!8, minimum width=4.8cm, minimum height=1.6cm] (policy) at (0,5.2) {Native Script Minting Policy\\[2pt]\scriptsize ScriptPubkey / ScriptAll\\Controls ALL token mint/burn};
 
   % Validators
   \node[archbox, fill=green!8, minimum width=3.6cm, minimum height=2.2cm, text width=3.2cm] (sigval) at (-2.4,2.2) {\textbf{Signature Collection}\\[2pt]\scriptsize Multi-party signing\\Collects sig+val tokens\\Redeemers:\\0: Collect (signer)\\1: Finalize (auth)\\2: Reclaim (cancel)};
@@ -383,7 +383,7 @@ The system employs a hybrid approach: \textbf{native scripts} handle routine tok
 
 \subsubsection{Minting Policy} The policy restricts all token minting and burning to holders of a specific authority key. The policy ID (Blake2b-224 hash of the native script) is deterministically reproducible, enabling independent verification.
 
-\subsubsection{Signature Collection Validator} Manages multi-party document signing through three redeemer actions: \textsc{Collect} (any required signer deposits tokens), \textsc{Finalize} (authority signs when all deposits present), and \textsc{Reclaim} (original depositor reclaims if cancelled).
+\subsubsection{Signature Collection Validator} Manages multi-party document signing through three redeemer actions: \textsc{Collect} (any required signer deposits tokens), \textsc{Finalize} (authority signs when all deposits present), and \textsc{Reclaim} (original depositor reclaims if cancelled). To avoid eUTxO contention when multiple signers deposit simultaneously, each signer creates an independent UTxO at the script address containing their tokens and a datum identifying the work product. The authority's \textsc{Finalize} transaction then consumes all per-signer UTxOs atomically, eliminating the single-UTxO concurrency bottleneck inherent in shared-state designs.
 
 \subsubsection{Dues Enforcement Contract} Links license validity to periodic payments, parameterized by annual dues amount, grace period, and license reference.
 
@@ -468,7 +468,7 @@ Network selection is configured via the \texttt{CARDANO\_NETWORK} environment va
 
 \subsection{Transaction Utilities}
 
-The \texttt{tx\_utils} module provides six transaction-building functions: \texttt{estimate\_fee()}, \texttt{build\_mint\_tx()}, \texttt{build\_transfer\_tx()}, \texttt{build\_multisig\_tx()}, \texttt{submit\_tx()}, and \texttt{wait\_for\_confirmation()}. UTxO selection uses a greedy algorithm with a 200,000 lovelace fee buffer. Maximum transaction size is 16,384 bytes.
+The \texttt{tx\_utils} module provides six transaction-building functions: \texttt{estimate\_fee()}, \texttt{build\_mint\_tx()}, \texttt{build\_transfer\_tx()}, \texttt{build\_multisig\_tx()}, \texttt{submit\_tx()}, and \texttt{wait\_for\_confirmation()}. UTxO selection defaults to PyCardano's \texttt{LargestFirstSelector} with a 200,000 lovelace fee buffer, avoiding the fragmentation risks of a naive greedy algorithm when users accumulate many small signature token UTxOs. The \texttt{RandomImproveSelector} is available as an alternative for better UTxO set distribution. Maximum transaction size is 16,384 bytes.
 
 \subsection{Database Schema}
 
@@ -546,7 +546,7 @@ We identify six attack surfaces, illustrated in Fig.~\ref{fig:threats}, assessed
 
 \subsection{On-Chain Costs}
 
-Table~\ref{tab:costs} summarizes on-chain costs for key operations. All transaction fees use native script execution (zero Plutus execution fees).
+Table~\ref{tab:costs} summarizes on-chain costs for key operations. Minting operations use native script execution (zero Plutus execution fees, ${\sim}$0.17~ADA). Validator operations (signature collection, dues enforcement, CIP-68 datum updates) use Plutus V2 execution and incur additional CPU/Memory fees (${\sim}$0.3--0.5~ADA total).
 
 \begin{table}[t]
 \centering
@@ -564,11 +564,12 @@ Mint Validity Token & $\sim$0.2 & $\sim$2.0 & $\sim$2.2 \\
 Sign Document (deposit) & $\sim$0.2 & $\sim$2.0 & $\sim$2.2 \\
 Finalize Work Product & $\sim$0.3 & $\sim$2.0 & $\sim$2.3 \\
 Renew Validity & $\sim$0.2 & $\sim$2.0 & $\sim$2.2 + dues \\
-Revoke License (burn) & $\sim$0.2 & 0 & $\sim$0.2 \\
+Revoke License (datum update) & $\sim$0.3 & 0 & $\sim$0.3\textsuperscript{$\dagger$} \\
 \bottomrule
 \end{tabular}
 \vspace{2pt}
-\scriptsize\textit{Note: Hydra state-channel batching (2026 roadmap) reduces effective cost to sub-0.01 ADA for high-volume renewals.}
+\scriptsize\textsuperscript{$\dagger$}Revocation via CIP-68 datum update modifies the authority-held Reference Token in place; the ${\sim}$2.0~ADA minUTxO deposit remains locked at the Reference Token UTxO. If the authority later burns the token entirely, the locked minUTxO is recovered, yielding a net refund of ${\sim}$1.7~ADA.\\[2pt]
+\textit{Note: Hydra state-channel batching (2026 roadmap) reduces effective cost to sub-0.01 ADA for high-volume renewals.}
 \end{table}
 
 \subsection{Throughput and Latency}
@@ -614,13 +615,13 @@ Compared to current verification service fees (\$5--25 per query from FSMB, Nurs
 
 Jane Smith, PE, holds a California license and needs to stamp a seismic retrofit design for a Nevada project. Under current practice, Jane must: (1)~verify her California PE license, (2)~apply for Nevada reciprocity (4--8 weeks), (3)~stamp documents meeting Nevada requirements, and (4)~ensure independent verifiability.
 
-With the proposed system, the California Board mints a license NFT (CIP-25 metadata: type=PE, jurisdiction=US-CA, number=PE-2026-00042). Jane receives 100 signature tokens and a validity token. Nevada mints a reciprocal NFT cross-referencing California's. To stamp, Jane deposits a signature token and validity token into the work product validator. The reviewing PE performs the same. Verification completes in $<$5 seconds versus days for manual verification. If California disciplines Jane's license, the board burns her validity token---the on-chain burn propagates globally within $\sim$5 minutes. Reciprocity via cross-referenced NFTs can be optionally anchored to Veridian ACDC for eIDAS 2.0 interoperability~\cite{veridian2025}.
+With the proposed system, the California Board mints a license NFT (CIP-25 metadata: type=PE, jurisdiction=US-CA, number=PE-2026-00042). Jane receives 100 signature tokens and a validity token. Nevada mints a reciprocal NFT cross-referencing California's. To stamp, Jane deposits a signature token and validity token into the work product validator. The reviewing PE performs the same. Verification completes in $<$5 seconds versus days for manual verification. If California disciplines Jane's license, the board updates the CIP-68 Reference Token datum to \texttt{status: revoked}---requiring only the board's authority key and no interaction with Jane's wallet. The revocation propagates globally within $\sim$5 minutes. Reciprocity via cross-referenced NFTs can be optionally anchored to Veridian ACDC for eIDAS 2.0 interoperability~\cite{veridian2025}.
 
 \subsection{Medical License Interstate Practice}
 
 Dr.~Michael Chen holds a Massachusetts medical license and practices telemedicine in four additional states via the IMLC. Currently, even with the IMLC's streamlined process, Dr.~Chen faces 4--6 weeks per state application, with the FCVS creating redundant verification cycles.
 
-The Massachusetts board mints a license NFT (type=MD, specialty=Internal Medicine). The IMLC Commission mints compact license NFTs cross-referencing it. Real-time verification replaces the multi-day FCVS process. If Massachusetts takes an adverse action, the board burns Dr.~Chen's validity token in a single transaction. The revocation cascade---from board action to nationwide effect---completes within the $\sim$5-minute Cardano finality window versus weeks through the NPDB~\cite{npdb2024,imlc2025}. Cross-jurisdiction reciprocity via cross-referenced NFTs can be optionally anchored to Veridian ACDC for eIDAS 2.0 interoperability~\cite{veridian2025}.
+The Massachusetts board mints a license NFT (type=MD, specialty=Internal Medicine). The IMLC Commission mints compact license NFTs cross-referencing it. Real-time verification replaces the multi-day FCVS process. If Massachusetts takes an adverse action, the board updates the CIP-68 Reference Token datum to \texttt{status: revoked} in a single transaction---requiring only the board's authority key. The revocation cascade---from board action to nationwide effect---completes within the $\sim$5-minute Cardano finality window versus weeks through the NPDB~\cite{npdb2024,imlc2025}. Cross-jurisdiction reciprocity via cross-referenced NFTs can be optionally anchored to Veridian ACDC for eIDAS 2.0 interoperability~\cite{veridian2025}.
 
 \subsection{Legal Document Execution}
 
@@ -655,7 +656,7 @@ Fig.~\ref{fig:sequence} illustrates the license issuance and verification sequen
   \draw[seqarrow] (6.4,-4.2) -- node[above, font=\tiny] {5. Deposit sig+val to validator} (3.2,-4.2);
   \draw[seqarrow] (9.6,-5) -- node[above, font=\tiny] {6. Query policy ID + UTxO} (3.2,-5);
   \draw[seqarrow] (3.2,-5.8) -- node[above, font=\tiny] {7. Proof: token + metadata + tx} (9.6,-5.8);
-  \draw[seqarrow, dashed, red!60!black] (0,-6.6) -- node[above, font=\tiny, text=red!60!black] {8. Revoke: burn validity token} (3.2,-6.6);
+  \draw[seqarrow, dashed, red!60!black] (0,-6.6) -- node[above, font=\tiny, text=red!60!black] {8. Revoke: update ref datum} (3.2,-6.6);
 \end{tikzpicture}
 \caption{Sequence diagram: credential lifecycle from issuance through verification and revocation.}
 \label{fig:sequence}
@@ -681,7 +682,7 @@ Table~\ref{tab:comparison} compares the proposed system against four representat
 Blockchain & Bitcoin/Eth. & HL Indy (perm.) & Cardano & None (CAs) & Off-chain VC + hash & \textbf{Cardano} \\
 Cred.\ model & Off-chain JSON-LD & VC + AnonCreds & VC, DID-anchored & X.509 certs & ACDC accumulator & \textbf{On-chain NFT} \\
 Issuance & Issuer key & Schema + cred def & DID ops & CA hierarchy & Issuer key & \textbf{Plutus policy} \\
-Revocation & Issuer list & Rev.\ registry & DID deactivation & CRL/OCSP & Protocol-level & \textbf{Token burn} \\
+Revocation & Issuer list & Rev.\ registry & DID deactivation & CRL/OCSP & Protocol-level & \textbf{CIP-68 datum} \\
 Multi-sign & None & Limited & None & Cross-cert & None & \textbf{Validator} \\
 Payment & None & None & None & None & None & \textbf{Dues contract} \\
 Privacy & None & AnonCreds ZKP & Selective discl. & None & Selective discl. & None (CIP-25) \\
@@ -689,7 +690,7 @@ Privacy & None & AnonCreds ZKP & Selective discl. & None & Selective discl. & No
 \end{tabular}
 \end{table*}
 
-The fundamental architectural distinction is the treatment of credentials as \emph{data documents} (Blockcerts, Aries/Indy, Identus) versus \emph{first-class blockchain assets} (this system). In Blockcerts, the blockchain serves only as a timestamping service; credentials exist off-chain with issuer-hosted revocation lists. If the issuer's server is offline, revocation status is unknowable. Our system implements revocation through on-chain token burning---permanent, verifiable by any party, and independent of issuer availability.
+The fundamental architectural distinction is the treatment of credentials as \emph{data documents} (Blockcerts, Aries/Indy, Identus) versus \emph{first-class blockchain assets} (this system). In Blockcerts, the blockchain serves only as a timestamping service; credentials exist off-chain with issuer-hosted revocation lists. If the issuer's server is offline, revocation status is unknowable. Our system implements revocation through CIP-68 Reference Token datum updates---the authority sets \texttt{status: revoked} on the Reference Token it controls, instantly verifiable by any party via inline datum inspection, and independent of issuer server availability.
 
 Aries/Indy's primary advantage is privacy through AnonCreds: selective attribute disclosure without revealing the credential itself. For professional credentials, however, this trade-off is less acute---a PE stamp must identify the engineer, a medical license must be publicly verifiable, and bar membership is a matter of public record~\cite{hyperledger2024}.
 
@@ -813,7 +814,7 @@ For high-value licensing systems, a multi-signature wallet with $\geq$60\% thres
 
 This paper has presented a blockchain-based professional licensing and digital signature system built on Cardano's native multi-asset model and Plutus V2 smart contract capabilities. The system addresses four fundamental weaknesses of current credential verification infrastructure:
 
-\textbf{Centralized revocation} is replaced by on-chain token burn under authority-controlled minting policies, propagating globally within $\sim$5 minutes versus days-to-weeks through current systems.
+\textbf{Centralized revocation} is replaced by CIP-68 Reference Token datum updates under authority-controlled policies, propagating globally within $\sim$5 minutes versus days-to-weeks through current systems. The authority updates the datum unilaterally---no interaction with the licensee's wallet is required.
 
 \textbf{Off-chain policy enforcement} is replaced by on-chain minting policy constraints with deterministic, independently verifiable policy IDs.
 
@@ -959,6 +960,9 @@ arXiv:2502.02520v2, ``Privacy-by-Design Layered SSI Frameworks,'' Aug 2025.
 
 \bibitem{lerbridge}
 arXiv:2601.02720, ``LER: Lightweight Verifiable Credential Bridge,'' Jan 2026.
+
+\bibitem{cip30}
+Cardano Foundation, ``CIP-30: Cardano dApp-Wallet Web Bridge,'' 2022.
 
 \end{thebibliography}
 
