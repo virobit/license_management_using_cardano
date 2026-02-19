@@ -460,6 +460,10 @@ payment_sk = PaymentSigningKey(
     payment_child.xprivate_key[:32])
 payment_vk = PaymentVerificationKey.from_signing_key(
     payment_sk)
+stake_child = hd_wallet.derive_from_path(
+    "m/1852'/1815'/0'/2/0")
+stake_vk = StakeVerificationKey.from_signing_key(
+    StakeSigningKey(stake_child.xprivate_key[:32]))
 base_address = Address(
     payment_vk.hash(), stake_vk.hash(), network)
 \end{lstlisting}
