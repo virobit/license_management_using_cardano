@@ -38,10 +38,6 @@ config/policies/
 htmlcov/
 .coverage
 
-# LaTeX build artifacts & source (PDFs committed separately)
+# LaTeX source & build artifacts (PDFs committed separately)
 docs/study_guide/
-docs/paper/*.aux
-docs/paper/*.log
-docs/paper/*.out
-docs/paper/*.toc
-docs/paper/*.pdf
+docs/paper/
