@@ -3,7 +3,7 @@
 **Category:** Cardano Use Cases: Prototype & Launch (15,000 – 200,000 ADA)
 **Requested Funding:** 150,000 ADA
 **Duration:** 6 months (max 12 per fund rules)
-**Proposer:** Timothy E. Smith, PE (Virobit Research)
+**Proposer:** Timothy E. Smith, PE
 **Open Source:** Yes (MIT License)
 
 ---
@@ -101,13 +101,13 @@ documentation.
 
 ### Team
 
-**Timothy E. Smith, PE** (Virobit Research) — Licensed Professional Engineer and
-independent researcher with production experience in Python, blockchain systems,
-and automated trading infrastructure. The working prototype demonstrates
-execution capability: the complete system (4 modules, 9 database tables, 3 smart
-contract types, 660 passing tests) was designed, built, and documented by the
-proposer. Development assisted by Claude Code (Anthropic); all architectural
-decisions and technical claims are the author's responsibility.
+**Timothy E. Smith, PE** — Licensed Professional Engineer and independent
+researcher with production experience in Python, blockchain systems, and
+automated trading infrastructure. The working prototype demonstrates execution
+capability: the complete system (4 modules, 9 database tables, 3 smart contract
+types, 660 passing tests) was designed, built, and documented by the proposer.
+Development assisted by Claude Code (Anthropic); all architectural decisions and
+technical claims are the author's responsibility.
 
 - GitHub: https://github.com/virobit/license_management_using_cardano
 - Paper: docs/Blockchain_Credential_Verification_Cardano_Architecture_v3.pdf
