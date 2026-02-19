@@ -6,35 +6,94 @@ Professional credential verification on the Cardano blockchain using NFT-based l
 
 This system allows licensing authorities to issue, manage, and verify professional credentials entirely on-chain:
 
-- **License NFTs** (CIP-25) — One NFT per professional license, carrying metadata (licensee, authority, jurisdiction, dates)
+- **License NFTs** (CIP-25/CIP-68) — One NFT per professional license, carrying metadata (licensee, authority, jurisdiction, dates)
 - **Signature Tokens** — Fungible tokens consumed when a licensee signs a document, creating an on-chain audit trail
 - **Validity Tokens** — Time-bounded tokens representing current license validity, renewable by the authority
-- **Work Products** — Multi-signer documents with wallet-based signature collection and finalization
-- **Dues Enforcement** — Smart contract logic for annual dues payment tracking and license validity gating
-- **Plutus V2 Contracts** — Authority-gated minting policies and signature collection validators
+- **Work Products** — Multi-signer documents with wallet-based signature collection and atomic finalization
+- **Dues Enforcement** — Plutus V2 contract for annual dues payment tracking and license validity gating
+- **SignatureCollectionValidator** — Authority-gated Plutus V2 contract managing concurrent multi-party signing via independent UTxOs
 
-See [`docs/`](docs/) for the full research paper and architecture.
+See [`docs/`](docs/) for the full research paper (v3.1) and 128-page study guide.
 
-## Installation
+## Prerequisites
+
+- **Python 3.10+** (Ubuntu 24.04 ships 3.12)
+- **Git**
+- A free [Blockfrost](https://blockfrost.io) API key (preprod network recommended)
+- Test ADA from the [Cardano faucet](https://docs.cardano.org/cardano-testnets/tools/faucet/)
+
+## Installation (Linux / Ubuntu)
+
+### 1. System packages
+
+Ubuntu 24.04+ enforces PEP 668, which blocks global pip installs. You **must** use a virtual environment.
+
+```bash
+sudo apt update
+sudo apt install -y git python3 python3-venv
+```
+
+### 2. Clone the repository
+
+```bash
+git clone https://github.com/virobit/license_management_using_cardano.git
+cd license_management_using_cardano
+```
+
+### 3. Create and activate a virtual environment
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 4. Install the package
 
 ```bash
 pip install -e .
 ```
 
-Or with dev dependencies:
+Or with dev/test dependencies:
 
 ```bash
 pip install -e ".[dev]"
 ```
 
-### Requirements
+### 5. Verify installation
 
-- Python 3.10+
-- A [Blockfrost](https://blockfrost.io) API key (free tier works for testnet)
+```bash
+python -c "import cardano_license; print(cardano_license.__version__)"
+```
 
 ## Configuration
 
-All settings via environment variables:
+### 1. Get a Blockfrost API key
+
+1. Sign up at [blockfrost.io](https://blockfrost.io) (free tier is sufficient)
+2. Create a project and select **Preprod** network
+3. Copy your Project ID (starts with `preprod...`)
+
+### 2. Set environment variables
+
+```bash
+cp .env.example .env
+nano .env    # or your preferred editor
+```
+
+Fill in your values:
+
+```
+BLOCKFROST_PROJECT_ID=preprodYourKeyHere
+CARDANO_NETWORK=preprod
+```
+
+Then load them:
+
+```bash
+source .env
+```
+
+### Environment variable reference
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -44,14 +103,39 @@ All settings via environment variables:
 | `CARDANO_LICENSE_DB` | `{DIR}/license.db` | SQLite database path |
 | `CARDANO_LICENSE_PASSWORD` | *(interactive prompt)* | Encryption password for wallet keys |
 
-Copy `.env.example` and fill in your values:
+## Quick Start
+
+### Step 1: Create wallets and initialize the database
 
 ```bash
-cp .env.example .env
-source .env
+cd examples
+python quickstart.py
 ```
 
-## Quick Start
+This creates an authority wallet and a licensee wallet. Save the printed addresses and mnemonics securely.
+
+### Step 2: Fund the authority wallet
+
+Copy the authority wallet address from the output above and request test ADA:
+
+- [Cardano Testnet Faucet](https://docs.cardano.org/cardano-testnets/tools/faucet/) — paste the `addr_test1...` address
+- You need at least 5 tADA for minting operations
+
+Verify funding:
+
+```bash
+cardano-license balance demo_authority
+```
+
+### Step 3: Mint a license and sign a document
+
+Once funded, run the quickstart again — it will proceed past wallet creation and mint a license NFT, signature tokens, a validity token, and sign a test document:
+
+```bash
+python quickstart.py
+```
+
+### Using the Python API directly
 
 ```python
 import asyncio
@@ -87,13 +171,12 @@ async def main():
 asyncio.run(main())
 ```
 
-See [`examples/quickstart.py`](examples/quickstart.py) for a complete walkthrough.
-
 ## CLI
 
 ```bash
-cardano-license status            # Show network config and counts
+cardano-license status            # Show network config and wallet counts
 cardano-license generate authority --label my_authority
+cardano-license generate licensee --label jane_doe
 cardano-license list              # List all wallets
 cardano-license balance my_authority
 cardano-license licenses          # List all license NFTs
@@ -106,7 +189,7 @@ cardano-license work-products     # List work products
 # Unit tests (no Blockfrost needed)
 pytest tests/test_license.py tests/test_contracts.py tests/test_tx_utils.py -v
 
-# Integration tests (requires funded testnet wallet)
+# Integration tests (requires funded testnet wallet + Blockfrost key)
 export BLOCKFROST_PROJECT_ID=preprodXXXXXX
 pytest tests/test_testnet.py -v -m integration --timeout=300
 ```
@@ -116,27 +199,43 @@ pytest tests/test_testnet.py -v -m integration --timeout=300
 ```
 ┌─────────────────────────────────────────────┐
 │              Licensing Authority             │
-│  - Issues License NFTs (CIP-25)             │
+│  - Issues License NFTs (CIP-25/CIP-68)      │
 │  - Mints signature & validity tokens        │
-│  - Deploys dues enforcement contracts       │
+│  - Deploys Plutus V2 validators             │
 └────────────────────┬────────────────────────┘
                      │ on-chain
 ┌────────────────────▼────────────────────────┐
 │              Cardano Blockchain              │
 │  - ScriptPubkey minting policies            │
-│  - CIP-25 metadata (license details)        │
-│  - Plutus V2 signature validators           │
+│  - CIP-68 datum metadata (mutable status)   │
+│  - SignatureCollectionValidator (Plutus V2)  │
+│  - DuesEnforcementContract (Plutus V2)      │
 │  - Time-bounded validity tokens             │
 └────────────────────┬────────────────────────┘
                      │ verify
 ┌────────────────────▼────────────────────────┐
 │              Licensed Professional          │
-│  - Holds license NFT in wallet              │
-│  - Signs documents (consumes sig tokens)    │
+│  - Holds license NFT in CIP-30 wallet      │
+│  - Signs documents (deposits sig tokens)    │
 │  - Renews validity tokens annually          │
 │  - Pays dues via smart contract             │
 └─────────────────────────────────────────────┘
 ```
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| `pip: command not found` | Activate your venv: `source .venv/bin/activate` |
+| `externally-managed-environment` | Use a venv (see Installation step 3) — do **not** use `--break-system-packages` |
+| `python3-venv` not found by apt | Run `sudo apt update` first — your apt sources may need refreshing |
+| `Blockfrost configured: False` | Set `BLOCKFROST_PROJECT_ID` in `.env` and run `source .env` |
+| `Insufficient funds` | Fund the authority wallet via the [faucet](https://docs.cardano.org/cardano-testnets/tools/faucet/) (need ~5 tADA) |
+
+## Documentation
+
+- **[Research Paper (v3.1)](docs/Blockchain_Credential_Verification_Cardano_Architecture_v3.1.pdf)** — Full system architecture and formal design
+- **[Study Guide](docs/Cardano_Credential_Verification_Study_Guide.pdf)** — 128-page companion covering blockchain fundamentals, eUTxO, smart contracts, privacy, and legal compliance
 
 ## License
 
