@@ -1,0 +1,1256 @@
+% ============================================================================
+% Chapter 3: Cardano Improvement Proposals (CIPs)
+% Study Guide — Blockchain-Based Credential Verification
+% ============================================================================
+
+\chapter{Cardano Improvement Proposals (CIPs)}
+\label{ch:cips}
+
+% --- Shared TikZ styles for this chapter ------------------------------------
+\tikzset{
+  guidebox/.style={draw, rounded corners=4pt, thick, align=center,
+    font=\sffamily\small, fill=white, minimum height=1cm},
+  guidearrow/.style={-{Latex[length=2.5mm]}, thick, color=gray!70!black},
+  guidelabel/.style={font=\sffamily\footnotesize, text=gray!50!black},
+}
+
+Cardano's technical evolution is governed by a structured, community-driven
+process called the \emph{Cardano Improvement Proposal} (CIP) system.  Every
+significant feature---from how wallets derive keys to how smart contracts
+reference on-chain data---begins life as a numbered CIP, undergoes public
+review, and is either accepted, modified, or rejected before implementation.
+Understanding the CIP landscape is essential for anyone building on Cardano
+because CIPs define the \emph{interface contracts} that all tools, wallets,
+and dApps must honour.
+
+This chapter examines the eight CIPs most relevant to the credential
+verification system described in this guide.  We begin with the governance
+process itself, then walk through the token metadata standards (CIP-25 and
+CIP-68), the wallet connectivity bridge (CIP-30), the Plutus~V2 trio that
+made advanced datum handling possible (CIPs~31, 32, and~33), and the
+hierarchical deterministic wallet derivation standard (CIP-1852).  For each
+CIP we explain \emph{what problem it solves}, \emph{how it works
+technically}, and \emph{how the credential system uses it}.
+
+
+% ============================================================================
+\section{What Are CIPs?}
+\label{sec:cips-overview}
+% ============================================================================
+
+A Cardano Improvement Proposal is a formal design document that describes a
+new feature, process, or informational guideline for the Cardano ecosystem.
+The CIP process is modelled directly on the Internet Engineering Task Force's
+\emph{Request for Comments} (RFC) system and Python's PEP process: anyone may
+author a proposal, but acceptance requires community review, editor approval,
+and---for protocol-level changes---implementation by the core development
+teams at Input Output Global (IOG), the Cardano Foundation, or Emurgo.
+
+CIPs are classified into three categories:
+
+\begin{description}[leftmargin=1.5em, style=nextline]
+  \item[Standards Track] Proposals that change the protocol, transaction
+    format, validation rules, or networking layer.  Examples include CIP-31
+    (Reference Inputs) and CIP-32 (Inline Datums).
+  \item[Process] Proposals that change governance procedures, the CIP process
+    itself, or tooling requirements.
+  \item[Informational] Proposals that document conventions, best practices, or
+    design rationale without mandating changes.  CIP-25 (NFT Metadata) began
+    as an informational standard that the community adopted voluntarily.
+\end{description}
+
+The lifecycle of a CIP proceeds through several stages: \textbf{Draft} (initial
+submission to the CIP repository on GitHub), \textbf{Proposed} (editors
+confirm the proposal is well-formed), \textbf{Active} (the community has
+reached rough consensus and implementations exist), and optionally
+\textbf{Inactive} or \textbf{Superseded} if a newer CIP replaces it.
+
+For the credential system, CIPs are not merely background reading---they are
+the \emph{specifications} that the code implements.  The minting policy encodes
+CIP-25 metadata structures.  The wallet module follows CIP-1852 derivation
+paths.  The revocation mechanism depends on CIP-68 datum semantics.
+Understanding each CIP at a technical level is prerequisite to understanding
+why the system works the way it does.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[node distance=1.8cm and 0.5cm]
+  \node[guidebox, fill=blue!8, minimum width=2.6cm] (draft) {Draft};
+  \node[guidebox, fill=yellow!8, minimum width=2.6cm, right=of draft] (proposed) {Proposed};
+  \node[guidebox, fill=green!8, minimum width=2.6cm, right=of proposed] (active) {Active};
+  \node[guidebox, fill=gray!10, minimum width=2.6cm, below=0.9cm of active] (inactive) {Inactive /\\Superseded};
+
+  \draw[guidearrow] (draft) -- node[above, guidelabel] {editor review} (proposed);
+  \draw[guidearrow] (proposed) -- node[above, guidelabel] {consensus} (active);
+  \draw[guidearrow] (active) -- node[right, guidelabel] {replaced} (inactive);
+  \draw[guidearrow, dashed] (proposed.south) -- ++(0,-0.5) -| node[below, near start, guidelabel] {withdrawn} (draft.south);
+\end{tikzpicture}
+\caption{CIP lifecycle stages.  A proposal moves from Draft through Proposed
+to Active once community consensus is reached and implementations exist.
+Proposals may be withdrawn or eventually superseded by newer standards.}
+\label{fig:cip-lifecycle}
+\end{figure}
+
+
+% ============================================================================
+\section{CIP-25: NFT Metadata Standard}
+\label{sec:cip25}
+% ============================================================================
+
+\subsection{The Problem}
+
+Cardano's native multi-asset framework allows anyone to mint custom tokens,
+but the ledger itself stores only three pieces of information about each
+token: the \emph{policy ID} (a Blake2b-224 hash of the minting policy script),
+the \emph{asset name} (an arbitrary byte string up to 32~bytes), and the
+\emph{quantity}.  There is no built-in mechanism for attaching human-readable
+names, images, descriptions, or any other metadata to a token.  Without a
+standard, every marketplace, wallet, and explorer would need to negotiate
+metadata formats bilaterally---an untenable situation for an open ecosystem.
+
+\subsection{How It Works}
+
+CIP-25 solves this by defining a JSON schema that is embedded in the
+\textbf{transaction auxiliary data} (formerly called ``transaction metadata'')
+at the time the token is minted.  The auxiliary data is a map keyed by
+integer labels; CIP-25 reserves label~\texttt{721} for NFT metadata.
+
+The schema is hierarchical: under label~721, the top-level key is the
+\textbf{policy ID} (hex-encoded).  Under each policy ID, keys are
+\textbf{asset names} (hex or UTF-8).  Under each asset name, the metadata
+object contains at minimum:
+
+\begin{itemize}[nosep]
+  \item \texttt{name} --- a human-readable display name
+  \item \texttt{image} --- a URI (typically IPFS) pointing to the token's
+    image
+  \item \texttt{description} --- free-text description
+\end{itemize}
+
+Additional fields are permitted and commonly used: \texttt{mediaType},
+\texttt{files} (for multi-asset bundles), and arbitrary key-value pairs.
+Wallets and marketplaces parse the minting transaction's auxiliary data to
+display this information to users.
+
+A critical property of CIP-25 metadata is that it is \textbf{immutable once
+written}.  The metadata exists in the auxiliary data of a specific
+transaction.  Transactions, once confirmed on-chain, cannot be altered.  This
+means that whatever metadata is attached at mint time is the metadata
+forever---there is no mechanism within CIP-25 to update, correct, or revoke
+the metadata after minting.
+
+For simple NFTs---artwork, collectibles, event tickets---immutability is a
+feature.  For credentials that may need to reflect status changes
+(revocation, suspension, renewal), immutability is a fundamental limitation.
+This limitation is precisely what motivated CIP-68.
+
+\subsection{How the Credential System Uses CIP-25}
+
+In the credential system, CIP-25 metadata is attached to license NFTs at
+mint time.  The metadata records the license type, jurisdiction, issue date,
+license number, and the licensee's public key hash.  Because this
+information is immutable, it serves as a permanent attestation: ``At this
+point in time, this authority issued this credential to this individual.''
+
+Verification of the attestation is straightforward: a verifier checks that
+(1)~the token exists in the holder's wallet, (2)~the policy ID matches the
+known authority, and (3)~the CIP-25 metadata in the minting transaction
+matches the claimed credential details.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+  metabox/.style={guidebox, text width=5.5cm, align=left,
+    font=\ttfamily\scriptsize, minimum height=0.6cm},
+]
+  % Outer transaction box
+  \node[guidebox, fill=blue!8, minimum width=8.5cm, minimum height=8.2cm,
+    label={[font=\sffamily\small\bfseries]above:Minting Transaction Auxiliary Data}] (txbox) at (0,0) {};
+
+  % Label 721
+  \node[guidebox, fill=yellow!8, minimum width=7.5cm, minimum height=7cm,
+    anchor=north] (l721) at (0,3.3) {};
+  \node[guidelabel, anchor=north west] at (l721.north west) {label: \textbf{721}};
+
+  % Policy ID
+  \node[guidebox, fill=green!8, minimum width=6.5cm, minimum height=5.8cm,
+    anchor=north] (pid) at (0,2.5) {};
+  \node[guidelabel, anchor=north west, text width=6cm] at (pid.north west)
+    {policy\_id: \texttt{a1b2c3...}};
+
+  % Asset name
+  \node[guidebox, fill=orange!8, minimum width=5.5cm, minimum height=4.4cm,
+    anchor=north] (aname) at (0,1.6) {};
+  \node[guidelabel, anchor=north west] at (aname.north west)
+    {asset\_name: \texttt{PE\_License\_042}};
+
+  % Fields
+  \node[metabox, fill=white] (f1) at (0,0.4)
+    {\textcolor{keyword}{"name"}: "PE License \#042"};
+  \node[metabox, fill=white, below=0.15cm of f1] (f2)
+    {\textcolor{keyword}{"image"}: "ipfs://Qm..."};
+  \node[metabox, fill=white, below=0.15cm of f2] (f3)
+    {\textcolor{keyword}{"description"}: "California PE"};
+  \node[metabox, fill=white, below=0.15cm of f3] (f4)
+    {\textcolor{keyword}{"license\_type"}: "PE"};
+  \node[metabox, fill=white, below=0.15cm of f4] (f5)
+    {\textcolor{keyword}{"jurisdiction"}: "US-CA"};
+  \node[metabox, fill=white, below=0.15cm of f5] (f6)
+    {\textcolor{keyword}{"issue\_date"}: "2026-01-15"};
+
+  % Immutable label
+  \node[font=\sffamily\footnotesize\bfseries, text=red!60!black,
+    rotate=35] at (3.2,2.6) {IMMUTABLE};
+\end{tikzpicture}
+\caption{CIP-25 metadata structure.  The JSON schema is nested under
+label~721, then by policy ID and asset name.  Once written to the
+transaction auxiliary data, the metadata cannot be changed.}
+\label{fig:cip25-metadata}
+\end{figure}
+
+
+% ============================================================================
+\section{CIP-68: Datum Metadata Standard}
+\label{sec:cip68}
+% ============================================================================
+
+CIP-68 is the single most important CIP for the credential verification
+system.  It solves the fundamental limitation of CIP-25---immutable
+metadata---by introducing a \textbf{dual-token pattern} that separates
+ownership from metadata, enabling authority-controlled updates without
+requiring access to the token holder's private key.  This section is
+intentionally the longest in the chapter because understanding CIP-68 is
+prerequisite to understanding how credential revocation works.
+
+\subsection{The Problem CIP-68 Solves}
+
+Consider a professional engineering license issued as a CIP-25 NFT.  The
+metadata at mint time includes \texttt{status: active}.  Two years later, the
+licensing board discovers misconduct and needs to revoke the license.  Under
+CIP-25, this is \emph{impossible on-chain}: the metadata is baked into the
+minting transaction and cannot be altered.  The board's only options are:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Burn and re-mint.}  The authority could burn the original
+    token and mint a new one with \texttt{status: revoked}.  But burning
+    requires consuming the UTxO that holds the token---which is in the
+    \emph{licensee's} wallet.  Under the eUTxO model, spending a UTxO
+    requires the holder's private key.  A revoked licensee has no incentive
+    to cooperate, and the authority \emph{cannot} spend the licensee's UTxO
+    without that key.
+  \item \textbf{Off-chain revocation list.}  The authority maintains a
+    database of revoked credentials, and verifiers must check both the
+    on-chain token and the off-chain list.  This reintroduces centralized
+    infrastructure, single points of failure, and availability dependencies
+    ---exactly the problems blockchain was supposed to solve.
+  \item \textbf{Accept that on-chain revocation is impossible.}  Many
+    early Cardano credential projects reached this conclusion and treated
+    the blockchain as a timestamping service only.
+\end{enumerate}
+
+CIP-68 provides a fourth option: \textbf{mutable on-chain metadata} through
+a clever separation of concerns.
+
+\subsection{The Dual-Token Pattern}
+
+CIP-68 defines a naming convention using \textbf{asset name labels}---a
+4-byte prefix prepended to the asset name that identifies the token's role.
+The two most important labels are:
+
+\begin{description}[leftmargin=2em, style=nextline, nosep]
+  \item[Label 100 --- Reference Token]
+    Held by the \textbf{issuing authority}.  This token sits at a script
+    address (not a personal wallet) and carries an \textbf{inline datum}
+    containing all mutable metadata: license type, jurisdiction, issue date,
+    status, and any other fields the authority may need to update.  Because
+    the Reference Token is at a script address controlled by the authority,
+    the authority can spend and re-create this UTxO with an updated datum at
+    any time, without any involvement from the token holder.
+
+  \item[Label 222 --- User Token]
+    Held by the \textbf{credential holder} (the licensee).  This token is
+    a standard native asset that lives in the holder's personal wallet.  It
+    is \emph{immutable} in the CIP-25 sense---the holder possesses it as
+    proof of credential issuance.  The User Token contains no mutable
+    metadata; its sole purpose is to attest that the holder was issued a
+    credential under a specific policy.
+\end{description}
+
+The two tokens share the same policy ID and base asset name, differing only
+in their 4-byte label prefix.  This creates a cryptographic link: given a
+User Token with asset name \texttt{000de140} + \texttt{PE\_License\_042},
+anyone can deterministically compute the corresponding Reference Token's
+asset name as \texttt{000643b0} + \texttt{PE\_License\_042} and look up its
+inline datum to read the current metadata.
+
+\subsection{How Revocation Works}
+
+The breakthrough insight of CIP-68 for credential systems is this: the
+authority can \textbf{revoke a credential by updating the Reference Token's
+datum} from \texttt{status: active} to \texttt{status: revoked}.  This
+operation:
+
+\begin{itemize}[nosep]
+  \item Requires \textbf{only the authority's signature} (the Reference Token
+    is at the authority's script address).
+  \item Does \textbf{not touch the User Token} in the licensee's wallet---the
+    authority never needs the licensee's private key.
+  \item Propagates \textbf{globally within minutes} (Cardano's finality
+    window).
+  \item Is \textbf{verifiable by anyone}: read the Reference Token's inline
+    datum, check the status field.
+  \item Is \textbf{auditable}: the chain of datum updates (active $\to$
+    suspended $\to$ revoked) is visible in the transaction history.
+\end{itemize}
+
+This is the mechanism that makes eUTxO-based credential revocation possible
+without off-chain infrastructure, without the holder's cooperation, and
+without burning the original token.
+
+\subsection{Technical Details}
+
+The Reference Token's inline datum follows a standard structure defined by
+CIP-68:
+
+\begin{lstlisting}[language={}, caption={CIP-68 datum structure (simplified)}]
+{
+  "constructor": 0,
+  "fields": [
+    {                          // metadata map
+      "license_type": "PE",
+      "jurisdiction": "US-CA",
+      "license_number": "PE-2026-00042",
+      "issue_date": "2026-01-15",
+      "holder_pkh": "abc123...",
+      "status": "active",      // <-- MUTABLE
+      "last_updated": 12345678 // slot number
+    },
+    1                          // version number
+  ]
+}
+\end{lstlisting}
+
+The datum is encoded as CBOR (Concise Binary Object Representation) and
+stored directly in the UTxO as an inline datum (CIP-32).  The \texttt{status}
+field can hold any of: \texttt{active}, \texttt{suspended},
+\texttt{revoked}, or \texttt{expired}.  Each status change creates a new
+transaction on-chain, providing a complete audit trail.
+
+The script address holding the Reference Token enforces that only the
+authority's key can spend (and re-create) the UTxO.  This is typically
+implemented as a simple \texttt{ScriptPubkey} validator or a Plutus V2
+spending validator that checks for the authority's signature in the
+transaction signatories.
+
+\subsection{Verification Flow}
+
+When a verifier wants to check a credential, the process is:
+
+\begin{enumerate}[nosep]
+  \item Observe the User Token (label~222) in the holder's wallet.
+  \item Extract the policy ID and base asset name.
+  \item Compute the Reference Token (label~100) asset name.
+  \item Query the blockchain for the UTxO containing the Reference Token.
+  \item Read the inline datum from that UTxO.
+  \item Check the \texttt{status} field.
+\end{enumerate}
+
+This entire process requires only standard blockchain queries---no off-chain
+service, no authority server, no API key.  The data is public, the datum is
+inline (CIP-32), and the verification is purely mathematical.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+  entity/.style={guidebox, minimum width=3.2cm, minimum height=1.2cm},
+  token/.style={guidebox, minimum width=3.8cm, minimum height=2.8cm,
+    text width=3.4cm, align=left, font=\sffamily\scriptsize},
+  node distance=1.2cm and 2.8cm,
+]
+  % --- Entities ---
+  \node[entity, fill=purple!8] (authority) at (-3.5, 5.5)
+    {\textbf{Licensing Board}\\(Authority)};
+  \node[entity, fill=blue!8] (holder) at (3.5, 5.5)
+    {\textbf{License Holder}\\(Professional)};
+
+  % --- Reference Token ---
+  \node[token, fill=orange!8] (reftok) at (-3.5, 1.8)
+    {\textbf{Reference Token}\\(Label 100)\\[4pt]
+    \texttt{policy: a1b2c3...}\\
+    \texttt{name: (100)PE\_042}\\[3pt]
+    \underline{Inline Datum:}\\
+    \texttt{\ type: PE}\\
+    \texttt{\ jurisdiction: US-CA}\\
+    \texttt{\ status: \textcolor{green!50!black}{active}}\\
+    \texttt{\ updated: slot\#789}};
+
+  % --- User Token ---
+  \node[token, fill=blue!8] (usertok) at (3.5, 1.8)
+    {\textbf{User Token}\\(Label 222)\\[4pt]
+    \texttt{policy: a1b2c3...}\\
+    \texttt{name: (222)PE\_042}\\[3pt]
+    \underline{CIP-25 Metadata:}\\
+    \texttt{\ name: PE License}\\
+    \texttt{\ image: ipfs://Qm..}\\[3pt]
+    \footnotesize\textcolor{red!60!black}{IMMUTABLE}};
+
+  % --- Script address ---
+  \node[guidebox, fill=gray!10, minimum width=3.8cm, font=\sffamily\scriptsize]
+    (script) at (-3.5, -0.8) {Script Address\\(authority-controlled)};
+
+  % --- Personal wallet ---
+  \node[guidebox, fill=gray!10, minimum width=3.8cm, font=\sffamily\scriptsize]
+    (wallet) at (3.5, -0.8) {Personal Wallet\\(holder's private key)};
+
+  % --- Arrows: ownership ---
+  \draw[guidearrow] (authority) -- node[left, guidelabel, text width=1.8cm, align=center]
+    {controls\\script} (reftok);
+  \draw[guidearrow] (holder) -- node[right, guidelabel, text width=1.8cm, align=center]
+    {holds in\\wallet} (usertok);
+  \draw[guidearrow] (reftok) -- (script);
+  \draw[guidearrow] (usertok) -- (wallet);
+
+  % --- Update arrow ---
+  \draw[guidearrow, color=red!60!black, very thick, dashed]
+    (authority.south west) .. controls +(-1.5,-2) and +(-1.5,1.5) ..
+    node[left, font=\sffamily\scriptsize, text=red!60!black, text width=2.2cm, align=center]
+      {Can UPDATE\\datum to\\status: \textbf{revoked}}
+    (reftok.west);
+
+  % --- Link arrow ---
+  \draw[guidearrow, color=green!50!black, <->]
+    (reftok.east) -- node[above, guidelabel, text width=2.8cm, align=center]
+      {Same policy ID\\+ base asset name\\= cryptographic link}
+    (usertok.west);
+
+  % --- Verifier ---
+  \node[entity, fill=green!8] (verifier) at (0, -2.6)
+    {\textbf{Verifier}\\(Any party)};
+  \draw[guidearrow, dashed, color=green!50!black]
+    (verifier.north) -- ++(0,0.7) -- ++(-3.5,0)
+    node[above, near end, guidelabel] {reads datum}
+    -- (script.south);
+\end{tikzpicture}
+\caption{CIP-68 dual-token pattern for credential management.  The authority
+controls the Reference Token (label~100) at a script address and can update
+its inline datum---including the status field---at any time.  The holder
+possesses the immutable User Token (label~222) in their personal wallet.
+A verifier reads the Reference Token's datum to determine current credential
+status.  The authority never needs the holder's private key to revoke.}
+\label{fig:cip68-dual-token}
+\end{figure}
+
+\subsection{CIP-25 vs.\ CIP-68: Comparison}
+
+Table~\ref{tab:cip25-vs-cip68} summarizes the key differences between the
+two metadata standards.  For the credential system, CIP-68's mutable datum
+is the enabling feature that makes on-chain revocation practical.
+
+\begin{table}[ht]
+\centering
+\caption{Comparison of CIP-25 and CIP-68 metadata standards}
+\label{tab:cip25-vs-cip68}
+\small
+\begin{tabular}{@{}p{3.2cm}p{4.8cm}p{4.8cm}@{}}
+\toprule
+\textbf{Property} & \textbf{CIP-25} & \textbf{CIP-68} \\
+\midrule
+Metadata location & Transaction auxiliary data (label~721) & Inline datum on Reference Token UTxO \\
+Mutability & \textbf{Immutable} --- written once at mint & \textbf{Mutable} --- authority can update datum \\
+Token count & 1 token per credential & 2 tokens: Reference (100) + User (222) \\
+Who holds metadata & Embedded in minting tx (no custodian) & Reference Token at authority script address \\
+Revocation & Not possible on-chain & Datum update: \texttt{status $\to$ revoked} \\
+Authority key needed & Only at mint time & At mint \emph{and} for every datum update \\
+Holder key needed & Only to transfer/burn the token & Only to transfer/burn the User Token \\
+On-chain cost & $\sim$0.2~ADA (single token mint) & $\sim$0.4~ADA (two tokens + datum) \\
+Reading metadata & Parse minting tx auxiliary data & Read inline datum from Reference UTxO \\
+Audit trail & Single minting event & Full history of datum updates on-chain \\
+Requires CIP-31 & No & Yes (reference inputs for reading datum) \\
+Requires CIP-32 & No & Yes (inline datums for storing datum) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Why CIP-68 Matters for Credentials}
+
+The importance of CIP-68 for the credential system cannot be overstated.
+Before CIP-68, any Cardano-based credential project faced an impossible
+trilemma: (1)~you could store metadata on-chain but it was immutable; (2)~you
+could store metadata off-chain but that reintroduced centralization; or
+(3)~you could accept that revocation was not truly decentralized.
+
+CIP-68 breaks this trilemma by enabling \textbf{mutable on-chain metadata
+under authority control}.  The result is a system where:
+
+\begin{itemize}[nosep]
+  \item Credential issuance is on-chain and cryptographically verifiable.
+  \item Credential status is on-chain and always current.
+  \item Revocation is unilateral by the authority---no holder cooperation
+    required.
+  \item Verification is fully decentralized---any node can read the datum.
+  \item The audit trail is immutable---every status change is a new
+    transaction.
+\end{itemize}
+
+The dual-token pattern also provides a natural separation between
+\emph{proof of issuance} (the User Token in the holder's wallet says ``this
+authority issued me a credential'') and \emph{current status} (the Reference
+Token's datum says ``the credential is currently active/revoked/suspended'').
+This separation mirrors real-world credential systems where a paper
+certificate proves issuance but a database query confirms current status---
+except that in the CIP-68 model, both proofs are on-chain.
+
+
+% ============================================================================
+\section{CIP-30: dApp--Wallet Web Bridge}
+\label{sec:cip30}
+% ============================================================================
+
+\subsection{The Problem}
+
+A web-based credential management application needs to interact with a
+user's Cardano wallet: reading their address, checking token balances,
+and---most critically---asking the wallet to sign transactions.  Without a
+standard API, every wallet (Eternl, Nami, Lace, Flint, Typhon, etc.) would
+expose its own proprietary JavaScript interface, forcing dApp developers to
+write wallet-specific code and creating fragmentation across the ecosystem.
+
+More importantly, the security model must be \textbf{non-custodial}: the
+dApp must \emph{never} see the user's private keys.  If the application
+server were compromised, an attacker with access to private keys could drain
+wallets, forge signatures, or transfer credentials.  The wallet must sign
+transactions locally and return only the signed transaction to the dApp.
+
+\subsection{How It Works}
+
+CIP-30 defines a JavaScript API that Cardano wallets inject into the
+browser's \texttt{window.cardano} namespace.  The API follows a two-phase
+pattern:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Discovery and Connection.}  The dApp checks
+    \texttt{window.cardano} for available wallets, then calls
+    \texttt{cardano.<wallet>.enable()} to request user authorization.  The
+    user sees a popup in their wallet extension asking whether to connect.
+    If approved, the wallet returns an API handle.
+  \item \textbf{Interaction.}  The dApp uses the API handle to call
+    methods such as \texttt{getUsedAddresses()},
+    \texttt{getUtxos()}, \texttt{getBalance()}, and---most
+    importantly---\texttt{signTx(tx, partialSign)}.  The
+    \texttt{signTx} method takes an unsigned transaction (CBOR-encoded),
+    displays it to the user for approval, signs it with the wallet's private
+    key, and returns the signature (or signed transaction).
+\end{enumerate}
+
+The critical security property is that the private key \emph{never leaves
+the wallet extension}.  The dApp constructs the transaction, but the wallet
+signs it.  This is analogous to how a hardware wallet works: the application
+builds the transaction, the device signs it, and the application never sees
+the signing key.
+
+\subsection{How the Credential System Uses CIP-30}
+
+In the credential system, licensees and signers connect their wallets via
+CIP-30 to the web dashboard.  When a professional needs to sign a document
+(depositing signature and validity tokens into the work product validator),
+the application:
+
+\begin{enumerate}[nosep]
+  \item Builds the transaction off-chain using PyCardano (or a JavaScript
+    library in the browser).
+  \item Sends the unsigned transaction CBOR to the wallet via
+    \texttt{signTx()}.
+  \item The wallet displays the transaction details (tokens being sent,
+    destination address, fee) and asks the user to confirm.
+  \item The user approves; the wallet signs and returns the witness.
+  \item The application attaches the witness and submits the transaction to
+    the network.
+\end{enumerate}
+
+At no point does the application server have access to the user's signing
+key.  Even if the server is compromised, the attacker cannot sign
+transactions on behalf of users.  This non-custodial model is essential for
+a credential system where users must maintain sovereign control over their
+professional identities.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+  actor/.style={guidebox, minimum width=3cm, minimum height=1.2cm},
+  node distance=1.5cm and 4.5cm,
+]
+  % Actors
+  \node[actor, fill=blue!8] (dapp) at (0,0) {\textbf{dApp}\\(Web Browser)};
+  \node[actor, fill=green!8] (wallet) at (6,0) {\textbf{Wallet Extension}\\(Eternl / Nami / Lace)};
+  \node[actor, fill=purple!8] (chain) at (3,-5.5) {\textbf{Cardano Network}};
+
+  % Lifelines
+  \draw[dashed, gray!40] (dapp.south) -- ++(0,-5);
+  \draw[dashed, gray!40] (wallet.south) -- ++(0,-5);
+
+  % Interactions
+  \draw[guidearrow] (0.1,-0.8) -- node[above, guidelabel]
+    {1. \texttt{cardano.eternl.enable()}} (5.9,-0.8);
+  \draw[guidearrow] (5.9,-1.4) -- node[above, guidelabel]
+    {2. API handle (user approved)} (0.1,-1.4);
+  \draw[guidearrow] (0.1,-2.0) -- node[above, guidelabel]
+    {3. \texttt{api.getUsedAddresses()}} (5.9,-2.0);
+  \draw[guidearrow] (5.9,-2.6) -- node[above, guidelabel]
+    {4. \texttt{[addr\_test1q...]}} (0.1,-2.6);
+  \draw[guidearrow] (0.1,-3.2) -- node[above, guidelabel]
+    {5. \texttt{api.signTx(unsignedTxCBOR)}} (5.9,-3.2);
+  \draw[guidearrow] (5.9,-3.8) -- node[above, guidelabel]
+    {6. Signed witness (key \textbf{never} leaves wallet)} (0.1,-3.8);
+  \draw[guidearrow] (0.1,-4.5) -- node[below left, guidelabel, text width=2.5cm, align=center]
+    {7. Submit\\signed tx} (chain);
+
+  % Security note
+  \node[draw, rounded corners=2pt, fill=red!6, font=\sffamily\scriptsize,
+    text width=4.5cm, align=center] at (3,-7)
+    {Private key NEVER leaves the wallet.\\The dApp sees only the signature.};
+\end{tikzpicture}
+\caption{CIP-30 dApp--Wallet interaction flow.  The web application requests
+connection, reads addresses and UTxOs, and sends unsigned transactions to the
+wallet for signing.  The wallet extension holds the private key locally and
+returns only the cryptographic witness.  The dApp never has access to the
+signing key.}
+\label{fig:cip30-flow}
+\end{figure}
+
+
+% ============================================================================
+\section{CIP-31: Reference Inputs}
+\label{sec:cip31}
+% ============================================================================
+
+\subsection{The Problem}
+
+In the original eUTxO model, every UTxO referenced by a transaction is
+\textbf{consumed} (spent).  If a transaction needs to read data from a UTxO
+---for example, checking a CIP-68 Reference Token's datum to verify a
+credential's status---it must spend that UTxO and recreate it in the same
+transaction.  This creates three problems:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Concurrency.}  If two transactions both need to read the
+    same Reference Token datum, they both try to spend the same UTxO.  Only
+    one can succeed; the other fails with a UTxO conflict.  For a credential
+    that many parties may verify simultaneously, this is unacceptable.
+  \item \textbf{Complexity.}  The spending transaction must include the
+    script that guards the UTxO, a redeemer, and must recreate the UTxO with
+    exactly the same value and datum---adding transaction size, fees, and
+    potential for bugs.
+  \item \textbf{Authorization.}  Spending a UTxO requires satisfying its
+    spending conditions (e.g., the authority's signature).  A verifier who
+    merely wants to \emph{read} the datum should not need the authority's
+    key.
+\end{enumerate}
+
+\subsection{How It Works}
+
+CIP-31 introduces \textbf{reference inputs}: a new transaction field that
+allows a transaction to \emph{read} a UTxO without consuming it.  The UTxO
+remains untouched on the ledger after the transaction is processed.  The
+transaction's scripts can access the reference input's value, datum, and
+address, but the UTxO is not spent.
+
+This is a Plutus~V2 feature introduced in the Vasil hard fork.  In the
+transaction body, reference inputs are listed in a separate field
+(\texttt{reference\_inputs}) distinct from regular inputs (\texttt{inputs}).
+The ledger validates that each referenced UTxO exists at the time the
+transaction is processed but does not remove it from the UTxO set.
+
+\subsection{How the Credential System Uses CIP-31}
+
+CIP-31 is critical for the credential system's verification flow.  When a
+verifier or a smart contract needs to check a license's current status, the
+transaction includes the CIP-68 Reference Token UTxO as a \textbf{reference
+input}.  The script reads the inline datum, checks the \texttt{status} field,
+and proceeds---all without spending the Reference Token.
+
+This means:
+\begin{itemize}[nosep]
+  \item Multiple verifications can happen simultaneously (no UTxO contention).
+  \item The verifier does not need the authority's key.
+  \item The Reference Token UTxO remains stable on-chain.
+  \item Transaction size is smaller (no need to recreate the UTxO).
+\end{itemize}
+
+Without CIP-31, the CIP-68 pattern would be impractical for any credential
+that is verified frequently, because each verification would compete to spend
+the same Reference Token UTxO.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+  utxo/.style={guidebox, minimum width=3.4cm, minimum height=1.4cm,
+    font=\sffamily\scriptsize},
+  tx/.style={guidebox, fill=yellow!8, minimum width=2.8cm, minimum height=1.2cm},
+  node distance=0.8cm and 2.2cm,
+]
+  % --- Consuming (old way) ---
+  \node[font=\sffamily\small\bfseries] at (-4.5,4.2) {Consuming Input (Pre-CIP-31)};
+
+  \node[utxo, fill=orange!8] (utxo1) at (-6,2.8) {Reference Token\\UTxO\\datum: status=active};
+  \node[tx] (tx1) at (-3,2.8) {Transaction};
+  \node[utxo, fill=orange!8] (utxo1b) at (-3,0.8) {Recreated UTxO\\(same datum)};
+
+  \draw[guidearrow] (utxo1) -- node[above, guidelabel] {consumed} (tx1);
+  \draw[guidearrow, dashed] (tx1) -- node[right, guidelabel] {must recreate} (utxo1b);
+  \draw[-{Latex[length=2.5mm]}, very thick, red!60!black]
+    (-6.8,2.1) -- (-6.8,1.5) node[below, font=\sffamily\tiny, text=red!60!black]
+    {UTxO destroyed};
+
+  % --- Reference Input (CIP-31) ---
+  \node[font=\sffamily\small\bfseries] at (3.5,4.2) {Reference Input (CIP-31)};
+
+  \node[utxo, fill=green!8] (utxo2) at (2,2.8) {Reference Token\\UTxO\\datum: status=active};
+  \node[tx] (tx2) at (5,2.8) {Transaction};
+
+  \draw[guidearrow, dashed, color=green!50!black] (utxo2) --
+    node[above, guidelabel] {read only} (tx2);
+  \draw[-{Latex[length=2.5mm]}, very thick, green!50!black]
+    (1.2,2.1) -- (1.2,1.5) node[below, font=\sffamily\tiny, text=green!50!black]
+    {UTxO survives};
+
+  \node[utxo, fill=green!8] (utxo2b) at (2,0.8) {Same UTxO\\still on ledger\\(untouched)};
+
+  % Divider
+  \draw[dashed, gray!40] (-0.5,4.5) -- (-0.5,-0.2);
+\end{tikzpicture}
+\caption{CIP-31 reference inputs compared to consuming inputs.  On the left,
+the pre-CIP-31 approach: reading a datum requires consuming the UTxO and
+recreating it (expensive, causes contention).  On the right, CIP-31: the
+transaction reads the UTxO without consuming it---the UTxO survives
+untouched, enabling concurrent reads by multiple transactions.}
+\label{fig:cip31-reference-inputs}
+\end{figure}
+
+
+% ============================================================================
+\section{CIP-32: Inline Datums}
+\label{sec:cip32}
+% ============================================================================
+
+\subsection{The Problem}
+
+Before CIP-32, the eUTxO model supported attaching data to script-locked
+UTxOs through \textbf{datum hashes}.  When creating a UTxO at a script
+address, the transaction included only the \emph{hash} of the datum in the
+UTxO itself.  The actual datum content had to be provided separately: either
+embedded elsewhere in the transaction's witness set, or stored entirely
+off-chain and supplied by whoever eventually spent the UTxO.
+
+This design had two major consequences:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Off-chain burden.}  The party spending the UTxO had to know
+    the original datum and include it in their spending transaction.  This
+    required off-chain coordination: the datum had to be stored somewhere
+    (a database, IPFS, a centralized service) and communicated to the
+    spender.  If the datum was lost, the UTxO became unspendable.
+  \item \textbf{No public readability.}  A third party observing the chain
+    could see that a UTxO had a datum hash, but could not determine the
+    datum's contents without access to the original data.  This made on-chain
+    data effectively opaque to verifiers who had not participated in the
+    original transaction.
+\end{enumerate}
+
+For a credential system where \emph{any party} must be able to read a
+credential's current status, datum hashes are fundamentally inadequate.  A
+verifier cannot check \texttt{status: active} if they can only see
+\texttt{datum\_hash: 0x3f7a...}.
+
+\subsection{How It Works}
+
+CIP-32 introduces \textbf{inline datums}: the full datum content is stored
+\emph{directly in the UTxO} on the ledger.  Any node, wallet, or explorer
+that can read the UTxO can also read the datum---no off-chain lookup
+required, no special access, no coordination with the datum creator.
+
+Technically, a UTxO's datum field now supports three states:
+\begin{description}[nosep, leftmargin=1.5em]
+  \item[None] No datum attached (standard ADA-only UTxO).
+  \item[Datum Hash] Only the hash is stored on-chain (pre-CIP-32 behavior).
+  \item[Inline Datum] The full datum is stored on-chain (CIP-32).
+\end{description}
+
+The trade-off is that inline datums increase the UTxO's size on the ledger
+and therefore increase the minimum ADA required (minUTxO) to hold the UTxO.
+For a credential datum containing license type, jurisdiction, status, and a
+few additional fields, the size increase is modest (a few hundred bytes),
+and the minUTxO impact is approximately 0.2--0.5~ADA additional.
+
+\subsection{How the Credential System Uses CIP-32}
+
+CIP-32 is what makes CIP-68 \emph{possible}.  The CIP-68 Reference Token
+stores its metadata as an inline datum so that:
+
+\begin{itemize}[nosep]
+  \item Any verifier can read the credential status by querying the UTxO.
+  \item No off-chain service is needed to resolve datum hashes.
+  \item Smart contracts executing on-chain (e.g., the Signature Collection
+    Validator) can read the Reference Token's datum via reference inputs
+    (CIP-31) and make validation decisions based on the credential's current
+    status.
+\end{itemize}
+
+Without inline datums, the dual-token pattern would require an off-chain
+datum registry---reintroducing exactly the centralized infrastructure that
+the blockchain architecture is designed to eliminate.  CIP-32, together with
+CIP-31, forms the technical foundation upon which CIP-68's mutable on-chain
+metadata is built.
+
+
+% ============================================================================
+\section{CIP-33: Reference Scripts}
+\label{sec:cip33}
+% ============================================================================
+
+\subsection{The Problem}
+
+Plutus scripts (smart contracts) can be large.  A compiled Plutus~V2 script
+may be 5--15~KB of serialized CBOR.  Before CIP-33, every transaction that
+invoked a Plutus script had to include the \emph{entire compiled script} in
+its witness set.  For a credential system where every signing operation
+invokes the Signature Collection Validator, this means attaching the same
+multi-kilobyte script to every transaction---wasting block space, increasing
+fees, and potentially pushing transactions over the 16,384-byte maximum
+transaction size.
+
+\subsection{How It Works}
+
+CIP-33 allows a Plutus script to be \textbf{deployed once to a UTxO} and
+then \textbf{referenced} by subsequent transactions.  The deployment
+transaction creates a UTxO containing the script in a special
+\texttt{reference\_script} field.  Future transactions that need to execute
+the script include only a reference to this UTxO (its transaction hash and
+output index), not the script itself.
+
+The ledger resolves the reference at validation time: when processing a
+transaction that references a script UTxO, the node fetches the script from
+the referenced UTxO and uses it for validation.  The referenced UTxO is
+\emph{not consumed}---like CIP-31 reference inputs, the script UTxO
+persists on-chain and can be referenced by unlimited future transactions.
+
+\subsection{How the Credential System Uses CIP-33}
+
+The credential system deploys the Signature Collection Validator and the
+Dues Enforcement Contract as reference scripts.  This provides three
+benefits:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Smaller transactions.}  Signing transactions include only a
+    32-byte reference (transaction hash) plus an index, instead of a
+    multi-kilobyte script.  This can reduce transaction size by 80--90\%.
+  \item \textbf{Lower fees.}  Cardano transaction fees are proportional to
+    transaction size.  Smaller transactions mean lower fees for every
+    signing operation.
+  \item \textbf{Auditability.}  The script is deployed once at a known UTxO.
+    Anyone can inspect the exact validator code that governs the credential
+    system by reading this single UTxO.
+\end{enumerate}
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+  txbox/.style={guidebox, minimum width=4cm, minimum height=2.6cm,
+    text width=3.6cm, align=left, font=\sffamily\scriptsize},
+  scriptbox/.style={guidebox, fill=purple!8, minimum width=3.2cm,
+    minimum height=1.2cm, font=\sffamily\scriptsize},
+]
+  % --- Without CIP-33 ---
+  \node[font=\sffamily\small\bfseries] at (-4.5,4.2)
+    {Without CIP-33};
+
+  \node[txbox, fill=red!6] (tx1) at (-4.5,1.6)
+    {\textbf{Transaction \#1}\\[2pt]
+     inputs: [...]\\
+     outputs: [...]\\
+     \textcolor{red!60!black}{witness: \{full\_script}\\
+     \textcolor{red!60!black}{\ \ (8 KB of CBOR)\}}\\[2pt]
+     size: $\sim$9.5 KB};
+
+  \node[txbox, fill=red!6] (tx2) at (-4.5,-2)
+    {\textbf{Transaction \#2}\\[2pt]
+     inputs: [...]\\
+     outputs: [...]\\
+     \textcolor{red!60!black}{witness: \{full\_script}\\
+     \textcolor{red!60!black}{\ \ (8 KB of CBOR)\}}\\[2pt]
+     size: $\sim$9.5 KB};
+
+  % --- With CIP-33 ---
+  \node[font=\sffamily\small\bfseries] at (3.5,4.2)
+    {With CIP-33};
+
+  \node[scriptbox] (deploy) at (3.5,3)
+    {Script UTxO\\(deployed once)\\8 KB};
+
+  \node[txbox, fill=green!8] (tx3) at (3.5,0.6)
+    {\textbf{Transaction \#1}\\[2pt]
+     inputs: [...]\\
+     outputs: [...]\\
+     \textcolor{green!50!black}{ref\_script: tx\#abc.0}\\
+     \textcolor{green!50!black}{\ \ (32-byte ref)}\\[2pt]
+     size: $\sim$1.5 KB};
+
+  \node[txbox, fill=green!8] (tx4) at (3.5,-2.6)
+    {\textbf{Transaction \#2}\\[2pt]
+     inputs: [...]\\
+     outputs: [...]\\
+     \textcolor{green!50!black}{ref\_script: tx\#abc.0}\\
+     \textcolor{green!50!black}{\ \ (32-byte ref)}\\[2pt]
+     size: $\sim$1.5 KB};
+
+  % Arrows
+  \draw[guidearrow, dashed, color=green!50!black]
+    (tx3.north) -- ++(0,0.5) -| (deploy.south);
+  \draw[guidearrow, dashed, color=green!50!black]
+    (tx4.north east) -- ++(0.5,0.5) -- ++(0,3.5) -| (deploy.east);
+
+  % Savings annotation
+  \node[draw, rounded corners=2pt, fill=yellow!8, font=\sffamily\scriptsize,
+    text width=3cm, align=center] at (3.5,-4.5)
+    {Savings: $\sim$80--90\% smaller\\transactions after deployment};
+
+  % Divider
+  \draw[dashed, gray!40] (-0.5,4.5) -- (-0.5,-5);
+\end{tikzpicture}
+\caption{CIP-33 reference scripts.  Without CIP-33 (left), every transaction
+must include the full compiled Plutus script in its witness set, consuming
+kilobytes of space per transaction.  With CIP-33 (right), the script is
+deployed once to a UTxO, and subsequent transactions reference it with a
+compact 32-byte pointer.  Transaction size drops by 80--90\%.}
+\label{fig:cip33-reference-scripts}
+\end{figure}
+
+
+% ============================================================================
+\section{CIP-1852 / BIP-44: HD Wallet Derivation}
+\label{sec:cip1852}
+% ============================================================================
+
+\subsection{The Problem}
+
+A naive approach to key management would generate a single random private
+key and derive a single address from it.  This creates several problems:
+
+\begin{enumerate}[nosep]
+  \item \textbf{No backup recoverability.}  If the key file is lost, all
+    funds and credentials are permanently inaccessible.  There is no way to
+    regenerate the key.
+  \item \textbf{Privacy.}  Using a single address for all transactions
+    creates a complete, publicly visible transaction graph.  Every
+    credential, every payment, every interaction is linked.
+  \item \textbf{Key management complexity.}  If a user needs separate keys
+    for different purposes (payment, staking, multiple credentials), they
+    must manage multiple independent keys with independent backups.
+  \item \textbf{No standard.}  Without a derivation convention, every wallet
+    would generate keys differently, making wallet recovery across different
+    software impossible.
+\end{enumerate}
+
+\subsection{How It Works}
+
+CIP-1852 defines Cardano's \textbf{hierarchical deterministic (HD) wallet}
+derivation scheme, building on the BIP-32 (key derivation), BIP-39
+(mnemonic encoding), and BIP-44 (multi-account structure) standards from the
+Bitcoin ecosystem.
+
+The core idea is that a single \textbf{24-word mnemonic phrase} (BIP-39)
+encodes a master seed from which an unlimited number of keys can be derived
+deterministically.  Given the same mnemonic, any compliant wallet software
+will derive exactly the same keys in exactly the same order.  This means:
+
+\begin{itemize}[nosep]
+  \item \textbf{Backup is trivial.}  Write down 24 words.  That is the
+    complete backup for all current and future keys.
+  \item \textbf{Recovery works across wallets.}  Import the mnemonic into
+    Eternl, Nami, Lace, or any CIP-1852-compliant wallet, and all keys are
+    regenerated identically.
+  \item \textbf{Unlimited addresses.}  Increment the index in the derivation
+    path to generate fresh addresses for privacy.
+\end{itemize}
+
+\subsubsection{The Derivation Path}
+
+CIP-1852 defines the following derivation path structure:
+
+\begin{center}
+\texttt{m / purpose' / coin\_type' / account' / role / index}
+\end{center}
+
+\begin{description}[nosep, leftmargin=1.5em]
+  \item[\texttt{m}] The master key derived from the BIP-39 mnemonic.
+  \item[\texttt{purpose' = 1852'}] Identifies this as a Cardano Shelley-era
+    derivation (named after Ada Lovelace's birth year).  The apostrophe
+    denotes \emph{hardened derivation}.
+  \item[\texttt{coin\_type' = 1815'}] Identifies the Cardano blockchain
+    (named after Ada Lovelace's death year).  Registered in the SLIP-44
+    coin type registry.
+  \item[\texttt{account' = 0'}] Account index.  Most users use account~0;
+    multiple accounts allow logical separation (e.g., personal vs.\
+    professional credentials).
+  \item[\texttt{role}] Distinguishes key purpose:
+    \begin{itemize}[nosep]
+      \item \texttt{0} = External payment keys (receiving addresses)
+      \item \texttt{1} = Internal payment keys (change addresses)
+      \item \texttt{2} = Staking keys
+    \end{itemize}
+  \item[\texttt{index}] Sequential index within the role.  Incrementing
+    this generates additional keys.
+\end{description}
+
+The two most important paths for the credential system are:
+
+\begin{center}
+\begin{tabular}{ll}
+  \texttt{m/1852'/1815'/0'/0/0} & First payment key (for receiving tokens) \\
+  \texttt{m/1852'/1815'/0'/2/0} & First staking key (for delegation) \\
+\end{tabular}
+\end{center}
+
+\subsubsection{Hardened vs.\ Unhardened Derivation}
+
+The apostrophe (\texttt{'}) in the derivation path denotes \textbf{hardened
+derivation}.  This is a critical security distinction:
+
+\begin{description}[nosep, leftmargin=1.5em]
+  \item[Unhardened (normal) derivation] uses the parent's \emph{public key}
+    to derive child keys.  This means anyone with the parent public key can
+    compute all child public keys.  Useful for generating receiving addresses
+    without exposing the private key (e.g., a watch-only wallet or a payment
+    server).
+  \item[Hardened derivation] uses the parent's \emph{private key} to derive
+    child keys.  Knowing the parent public key reveals \emph{nothing} about
+    child keys.  This provides a security firewall: if a child private key
+    is compromised, the attacker cannot compute sibling or parent keys.
+\end{description}
+
+CIP-1852 requires hardened derivation for purpose, coin type, and account
+levels.  This ensures that compromise of a single payment key does not
+allow an attacker to derive the staking key, other account keys, or the
+master key.  The role and index levels use unhardened derivation, which
+enables watch-only wallets to generate addresses for receiving payments
+without access to private keys.
+
+\subsection{How the Credential System Uses CIP-1852}
+
+Every wallet in the credential system---authority, licensee, signer, and
+observer---is generated from a 24-word BIP-39 mnemonic using CIP-1852
+derivation.  The \texttt{generate\_wallet()} function:
+
+\begin{enumerate}[nosep]
+  \item Generates or accepts a BIP-39 mnemonic (24 words, 256 bits of
+    entropy).
+  \item Derives the master key using PBKDF2-HMAC-SHA512.
+  \item Derives the payment key at \texttt{m/1852'/1815'/0'/0/0}.
+  \item Derives the staking key at \texttt{m/1852'/1815'/0'/2/0}.
+  \item Constructs the base address by combining the payment key hash (PKH,
+    28~bytes) and staking key hash (SKH, 28~bytes) with the network
+    identifier.
+  \item Encodes the address in bech32 format (\texttt{addr\_test1...} for
+    testnet, \texttt{addr1...} for mainnet).
+\end{enumerate}
+
+The mnemonic is the \textbf{single point of backup}: losing it means losing
+all keys and all credentials.  In the production deployment, authority wallet
+mnemonics are encrypted with AES-256-GCM and stored with strict access
+controls.  Licensee and signer mnemonics are managed by their personal
+wallets (Eternl, Nami, etc.) via CIP-30---the credential system never sees
+or stores these mnemonics.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+  level 1/.style={sibling distance=5.5cm, level distance=1.6cm},
+  level 2/.style={sibling distance=4cm, level distance=1.6cm},
+  level 3/.style={sibling distance=5cm, level distance=1.6cm},
+  level 4/.style={sibling distance=2.8cm, level distance=1.6cm},
+  level 5/.style={sibling distance=1.6cm, level distance=1.6cm},
+  treenode/.style={guidebox, minimum width=1.8cm, minimum height=0.7cm,
+    font=\sffamily\tiny, inner sep=2pt},
+  edge from parent/.style={guidearrow, thick},
+  edge from parent path={(\tikzparentnode.south) -- (\tikzchildnode.north)},
+]
+  \node[treenode, fill=purple!8, minimum width=4cm]
+    {\textbf{Master Key (m)}\\24-word mnemonic $\to$ seed}
+    child {
+      node[treenode, fill=blue!8, minimum width=2.8cm]
+        {\textbf{1852'} (purpose)\\Cardano Shelley\\{\tiny\textcolor{red!60!black}{hardened}}}
+      child {
+        node[treenode, fill=blue!8, minimum width=2.5cm]
+          {\textbf{1815'} (coin type)\\Cardano ADA\\{\tiny\textcolor{red!60!black}{hardened}}}
+        child {
+          node[treenode, fill=blue!8, minimum width=2.4cm]
+            {\textbf{0'} (account)\\Default account\\{\tiny\textcolor{red!60!black}{hardened}}}
+          child {
+            node[treenode, fill=green!8, minimum width=2cm]
+              {\textbf{0} (external)\\Payment keys}
+            child {
+              node[treenode, fill=orange!8, minimum width=1.6cm]
+                {\textbf{0}\\1st payment\\key}
+            }
+            child {
+              node[treenode, fill=orange!8, minimum width=1.6cm]
+                {\textbf{1}\\2nd payment\\key}
+            }
+          }
+          child {
+            node[treenode, fill=green!8, minimum width=2cm]
+              {\textbf{2} (staking)\\Stake keys}
+            child {
+              node[treenode, fill=orange!8, minimum width=1.6cm]
+                {\textbf{0}\\1st stake\\key}
+            }
+          }
+        }
+      }
+    };
+
+  % Annotations
+  \node[guidelabel, text width=2.5cm, align=left] at (6.5,-2.4)
+    {Hardened levels\\(marked with ')\\use private key\\for derivation};
+  \node[guidelabel, text width=2.5cm, align=left] at (6.5,-5.6)
+    {Unhardened levels\\use public key\\$\to$ watch-only\\wallets possible};
+
+  % Bracket for hardened
+  \draw[decorate, decoration={brace, amplitude=5pt, mirror},
+    thick, gray!50!black]
+    (5.5,-0.5) -- (5.5,-4.2) node[midway, right=8pt] {};
+
+  % Bracket for unhardened
+  \draw[decorate, decoration={brace, amplitude=5pt, mirror},
+    thick, gray!50!black]
+    (5.5,-4.8) -- (5.5,-7.6) node[midway, right=8pt] {};
+\end{tikzpicture}
+\caption{CIP-1852 / BIP-44 hierarchical deterministic wallet derivation tree.
+The master key is derived from a 24-word mnemonic.  Purpose (1852'),
+coin type (1815'), and account (0') levels use hardened derivation (private
+key required), providing a security firewall.  Role and index levels use
+unhardened derivation, enabling watch-only wallets.  The credential system
+uses \texttt{m/1852'/1815'/0'/0/0} for payment and
+\texttt{m/1852'/1815'/0'/2/0} for staking.}
+\label{fig:cip1852-derivation}
+\end{figure}
+
+
+% ============================================================================
+\section{How the CIPs Work Together}
+\label{sec:cips-together}
+% ============================================================================
+
+The CIPs described in this chapter are not isolated features---they form an
+interlocking system where each standard enables or enhances the others.
+Understanding their interactions is essential for understanding the
+credential architecture as a whole.
+
+\textbf{CIP-32 enables CIP-68.}  Without inline datums, the Reference
+Token's metadata would be stored as a hash, requiring off-chain resolution.
+Inline datums make the metadata directly readable on-chain.
+
+\textbf{CIP-31 makes CIP-68 practical.}  Without reference inputs, every
+credential verification would consume (and have to recreate) the Reference
+Token UTxO, causing contention.  Reference inputs allow unlimited concurrent
+reads.
+
+\textbf{CIP-33 makes CIP-68 affordable.}  Without reference scripts, every
+transaction interacting with the credential validator would include the full
+Plutus script, inflating transaction size and fees.  Reference scripts reduce
+per-transaction overhead to a 32-byte pointer.
+
+\textbf{CIP-68 makes CIP-25 revocable.}  CIP-25 provides immutable
+attestation (``this credential was issued'').  CIP-68 adds mutable status
+(``the credential is currently active/revoked'').  Together, they provide
+both historical provenance and current validity.
+
+\textbf{CIP-30 connects users to the system.}  Without the dApp--wallet
+bridge, every credential operation would require server-side key management,
+creating custodial risk.  CIP-30 keeps private keys under user control.
+
+\textbf{CIP-1852 makes wallets recoverable and interoperable.}  Without
+HD derivation, losing a key file means losing all credentials.  With
+CIP-1852, 24 words are sufficient to recover everything.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+  cipbox/.style={guidebox, minimum width=2.8cm, minimum height=1cm,
+    font=\sffamily\scriptsize},
+  node distance=0.6cm and 1.2cm,
+]
+  % Central: CIP-68
+  \node[cipbox, fill=orange!8, minimum width=3.2cm, minimum height=1.4cm,
+    font=\sffamily\small] (cip68) at (0,0)
+    {\textbf{CIP-68}\\Mutable Metadata};
+
+  % Dependencies feeding into CIP-68
+  \node[cipbox, fill=green!8] (cip32) at (-4, 1.5) {CIP-32\\Inline Datums};
+  \node[cipbox, fill=green!8] (cip31) at (-4,-1.5) {CIP-31\\Reference Inputs};
+  \node[cipbox, fill=green!8] (cip33) at (-4, 0) {CIP-33\\Reference Scripts};
+
+  % CIP-25 companion
+  \node[cipbox, fill=blue!8] (cip25) at (4, 1.5) {CIP-25\\Immutable Metadata};
+
+  % CIP-30 and CIP-1852
+  \node[cipbox, fill=purple!8] (cip30) at (4, 0) {CIP-30\\Wallet Bridge};
+  \node[cipbox, fill=yellow!8] (cip1852) at (4,-1.5) {CIP-1852\\HD Wallets};
+
+  % Credential System
+  \node[cipbox, fill=red!6, minimum width=4cm, minimum height=1.2cm,
+    font=\sffamily\small] (system) at (0,-3.5)
+    {\textbf{Credential Verification System}};
+
+  % Arrows: dependencies
+  \draw[guidearrow] (cip32) -- node[above, guidelabel] {stores datum} (cip68);
+  \draw[guidearrow] (cip31) -- node[below, guidelabel] {reads datum} (cip68);
+  \draw[guidearrow] (cip33) -- node[above, guidelabel] {deploys script} (cip68);
+
+  % Arrows: to system
+  \draw[guidearrow] (cip68) -- (system);
+  \draw[guidearrow] (cip25) |- node[near end, above, guidelabel] {attestation} (system.north east);
+  \draw[guidearrow] (cip30) -- (system);
+  \draw[guidearrow] (cip1852) |- (system.south east);
+\end{tikzpicture}
+\caption{CIP dependency graph for the credential verification system.
+CIPs~31, 32, and~33 (the Plutus~V2 trio) form the technical foundation that
+makes CIP-68's mutable datum pattern practical and affordable.  CIP-25
+provides immutable attestation.  CIP-30 and CIP-1852 handle wallet
+connectivity and key management.  All six converge in the credential
+verification system.}
+\label{fig:cip-dependency}
+\end{figure}
+
+
+% ============================================================================
+\section{Chapter Summary}
+\label{sec:cips-summary}
+% ============================================================================
+
+This chapter examined the eight CIPs that form the technical foundation of
+the credential verification system:
+
+\begin{enumerate}[nosep]
+  \item \textbf{CIP-25} provides immutable NFT metadata, establishing
+    permanent on-chain attestation of credential issuance.
+  \item \textbf{CIP-68} introduces the dual-token pattern with mutable
+    inline datums, enabling authority-controlled revocation without requiring
+    the holder's private key---the key innovation for on-chain credential
+    management.
+  \item \textbf{CIP-30} defines the non-custodial dApp--wallet bridge,
+    keeping private keys under user control while enabling web-based
+    credential operations.
+  \item \textbf{CIP-31} introduces reference inputs, allowing transactions
+    to read UTxO data without consuming it---essential for concurrent
+    credential verification.
+  \item \textbf{CIP-32} introduces inline datums, storing full data directly
+    in UTxOs---the prerequisite for CIP-68's on-chain metadata.
+  \item \textbf{CIP-33} introduces reference scripts, reducing transaction
+    size and fees by deploying Plutus scripts once and referencing them.
+  \item \textbf{CIP-1852} defines HD wallet derivation, providing
+    recoverable, interoperable key management from a single mnemonic.
+\end{enumerate}
+
+The next chapter will examine how these CIPs are combined in the system
+architecture: the smart contract layer, the token taxonomy, and the
+transaction workflows that tie everything together.

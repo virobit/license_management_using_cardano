@@ -1,0 +1,287 @@
+% ============================================================================
+% Cardano Credential Verification: A Complete Study Guide
+%
+% Comprehensive tutorial covering every concept in the whitepaper
+% "Blockchain-Based Professional Credential Verification"
+% for readers with no prior blockchain background.
+%
+% Author: Timothy E. Smith, PE (Virobit)
+% Date: February 2026
+% ============================================================================
+
+\documentclass[11pt, oneside]{report}
+
+% --- Page Layout -----------------------------------------------------------
+\usepackage[
+  letterpaper,
+  top=1in, bottom=1in, left=1.15in, right=1.15in,
+  headheight=14pt
+]{geometry}
+
+% --- Core Packages ---------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{url}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{setspace}
+\usepackage{parskip}
+\usepackage{microtype}
+
+% TikZ for vector graphics
+\usepackage{tikz}
+\usetikzlibrary{
+  shapes.geometric, arrows.meta, positioning, fit, calc,
+  backgrounds, decorations.pathreplacing, chains, matrix
+}
+
+% Hyperref (loaded last per best practice)
+\usepackage[
+  bookmarks=true,
+  bookmarksnumbered=true,
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  citecolor=blue!60!black,
+  urlcolor=blue!60!black,
+  pdftitle={Cardano Credential Verification: A Complete Study Guide},
+  pdfauthor={Timothy E. Smith, PE},
+  pdfsubject={Blockchain, Cardano, Professional Credentials},
+]{hyperref}
+
+% --- Colors ----------------------------------------------------------------
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codeframe}{RGB}{200,200,200}
+\definecolor{keyword}{RGB}{0,100,170}
+\definecolor{string}{RGB}{170,60,0}
+\definecolor{comment}{RGB}{100,130,100}
+\definecolor{chaptercolor}{RGB}{30,80,140}
+\definecolor{sectioncolor}{RGB}{40,100,160}
+
+% --- Listing Style ---------------------------------------------------------
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{codeframe},
+  keywordstyle=\color{keyword}\bfseries,
+  stringstyle=\color{string},
+  commentstyle=\color{comment}\itshape,
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=2,
+  showstringspaces=false,
+  captionpos=b,
+  aboveskip=8pt,
+  belowskip=8pt,
+  xleftmargin=4pt,
+  xrightmargin=4pt
+}
+
+% --- TikZ Styles (shared across all chapters) ------------------------------
+\tikzset{
+  guidebox/.style={
+    draw, rounded corners=4pt, thick, align=center,
+    font=\sffamily\small, fill=white, minimum height=1cm
+  },
+  guideboxwide/.style={
+    draw, rounded corners=4pt, thick, align=center,
+    font=\sffamily\small, fill=white, minimum height=1cm,
+    minimum width=8cm
+  },
+  guidearrow/.style={
+    -{Latex[length=2.5mm]}, thick, color=gray!70!black
+  },
+  guidelabel/.style={
+    font=\sffamily\footnotesize, text=gray!50!black
+  },
+  tokenbox/.style={
+    draw, rounded corners=3pt, thick, align=center,
+    minimum height=1.6cm, minimum width=2.8cm,
+    font=\sffamily\scriptsize, fill=white
+  },
+  threatbox/.style={
+    draw, rounded corners=3pt, thick, align=center,
+    minimum height=1.4cm, minimum width=3.2cm,
+    font=\sffamily\scriptsize, fill=white
+  },
+  phaseblock/.style={
+    draw, rounded corners=3pt, thick, align=left,
+    text width=3.4cm, minimum height=1.5cm,
+    font=\sffamily\scriptsize, fill=white, inner sep=5pt
+  },
+  seqactor/.style={
+    rectangle, draw, fill=gray!15,
+    font=\sffamily\small, minimum width=1.8cm, minimum height=0.6cm,
+    align=center, text width=1.6cm
+  },
+  seqarrow/.style={-{Latex[length=2mm]}, thick},
+}
+
+% --- Chapter / Section Formatting ------------------------------------------
+\titleformat{\chapter}[display]
+  {\normalfont\LARGE\bfseries\color{chaptercolor}}
+  {\chaptertitlename\ \thechapter}{16pt}{\Huge}
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{sectioncolor}}
+  {\thesection}{1em}{}
+\titleformat{\subsection}
+  {\normalfont\large\bfseries}
+  {\thesubsection}{1em}{}
+
+% --- Header / Footer -------------------------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\leftmark}
+\fancyhead[R]{\small Cardano Credential Study Guide}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% --- Custom Commands -------------------------------------------------------
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+
+\newcommand{\keyterm}[1]{\textbf{\textcolor{chaptercolor}{#1}}}
+\newcommand{\cip}[1]{\texttt{CIP-#1}}
+\newcommand{\ada}{\textsc{ada}}
+
+% ============================================================================
+\begin{document}
+
+% --- Title Page ------------------------------------------------------------
+\begin{titlepage}
+\centering
+\vspace*{2cm}
+
+{\Huge\bfseries\color{chaptercolor}
+Cardano Credential Verification\\[0.4cm]
+\Large A Complete Study Guide}
+
+\vspace{1.5cm}
+
+{\large\itshape
+Comprehensive Tutorial for the Whitepaper\\
+``Blockchain-Based Professional Credential Verification:\\
+A Cardano Smart Contract Architecture for License Management\\
+and Digital Signatures'' (v3.1)}
+
+\vspace{2cm}
+
+\begin{tikzpicture}[scale=0.9, every node/.style={transform shape}]
+  % Shield shape for credential
+  \draw[thick, fill=purple!8, rounded corners=3pt]
+    (0,0) -- (2.5,0) -- (2.5,2.5) -- (1.25,3.5) -- (0,2.5) -- cycle;
+  \node[font=\sffamily\large\bfseries, text=purple!70!black] at (1.25,2.2) {CIP-68};
+  \node[font=\sffamily\small, text=purple!60!black] at (1.25,1.5) {Credential};
+  \node[font=\sffamily\small, text=purple!60!black] at (1.25,1.0) {NFT};
+
+  % Chain links
+  \foreach \x in {-2.5, -1.5, 4.0, 5.0} {
+    \draw[thick, fill=blue!8, rounded corners=2pt]
+      (\x, 1.2) rectangle (\x+0.8, 2.0);
+  }
+  \draw[thick, guidearrow] (-1.5+0.8, 1.6) -- (0, 1.6);
+  \draw[thick, guidearrow] (2.5, 1.6) -- (4.0, 1.6);
+  \draw[thick, guidearrow] (-2.5+0.8, 1.6) -- (-1.5, 1.6);
+  \draw[thick, guidearrow] (4.0+0.8, 1.6) -- (5.0, 1.6);
+
+  \node[font=\sffamily\tiny] at (-2.1, 1.6) {Blk};
+  \node[font=\sffamily\tiny] at (-1.1, 1.6) {Blk};
+  \node[font=\sffamily\tiny] at (4.4, 1.6) {Blk};
+  \node[font=\sffamily\tiny] at (5.4, 1.6) {Blk};
+\end{tikzpicture}
+
+\vspace{2cm}
+
+{\Large Timothy E. Smith, PE}\\[0.3cm]
+{\large Virobit Research}\\[0.3cm]
+{\large February 2026}
+
+\vfill
+
+{\small
+Open Source --- MIT License\\
+\url{https://github.com/virobit/license_management_using_cardano}
+}
+
+\end{titlepage}
+
+% --- Table of Contents -----------------------------------------------------
+\tableofcontents
+\newpage
+
+% --- Preface ---------------------------------------------------------------
+\chapter*{Preface}
+\addcontentsline{toc}{chapter}{Preface}
+
+This study guide is a companion to the research paper \textit{``Blockchain-Based Professional Credential Verification: A Cardano Smart Contract Architecture for License Management and Digital Signatures''} (v3.1, February 2026). While the paper presents the architecture for an academic audience, this guide is written for \textbf{anyone who wants to understand how the system works}, regardless of technical background.
+
+\textbf{No prior knowledge of blockchain, cryptography, or Cardano is assumed.} Every concept referenced in the whitepaper is explained from first principles, with diagrams, analogies, and code examples. By the end of this guide, you will understand:
+
+\begin{itemize}[nosep]
+  \item How blockchains work and why they are useful for credential verification
+  \item How Cardano's unique architecture (eUTxO, native tokens, Plutus) differs from other blockchains
+  \item What every Cardano Improvement Proposal (CIP) referenced in the paper does
+  \item How smart contracts enforce credential rules on Cardano
+  \item How the complete credential lifecycle works --- from issuance through revocation
+  \item How multi-party document signing is implemented
+  \item How privacy and legal compliance (GDPR, ESIGN, eIDAS) are achieved
+  \item How the \texttt{cardano-license} software package works
+  \item What the v4.0 roadmap delivers
+\end{itemize}
+
+Each chapter builds on the previous one, so we recommend reading in order. Key terms are \keyterm{highlighted in blue} when first introduced, and a comprehensive glossary is provided at the end.
+
+\vspace{1cm}
+\noindent\textit{This guide was prepared with assistance from Claude Code (Anthropic). All technical claims, architectural decisions, and editorial judgments are the sole responsibility of the author.}
+
+\newpage
+
+% ============================================================================
+% CHAPTER 1: Blockchain Fundamentals
+% ============================================================================
+\input{ch01_blockchain_fundamentals}
+
+% ============================================================================
+% CHAPTER 2: Cardano Architecture
+% ============================================================================
+\input{ch02_cardano_architecture}
+
+% ============================================================================
+% CHAPTER 3: Cardano Improvement Proposals (CIPs)
+% ============================================================================
+\input{ch03_cips}
+
+% ============================================================================
+% CHAPTER 4: Smart Contracts on Cardano
+% ============================================================================
+\input{ch04_smart_contracts}
+
+% ============================================================================
+% CHAPTER 5: The Credential Verification System
+% ============================================================================
+\input{ch05_credential_system}
+
+% ============================================================================
+% CHAPTER 6: Signing, Privacy, and Legal Compliance
+% ============================================================================
+\input{ch06_signing_privacy_legal}
+
+% ============================================================================
+% CHAPTER 7: Software & v4.0 Roadmap
+% ============================================================================
+\input{ch07_software_roadmap}
+
+% ============================================================================
+\end{document}
