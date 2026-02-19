@@ -37,3 +37,11 @@ config/policies/
 .pytest_cache/
 htmlcov/
 .coverage
+
+# LaTeX build artifacts & source (PDFs committed separately)
+docs/study_guide/
+docs/paper/*.aux
+docs/paper/*.log
+docs/paper/*.out
+docs/paper/*.toc
+docs/paper/*.pdf
