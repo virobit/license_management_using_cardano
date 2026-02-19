@@ -105,8 +105,8 @@ A Cardano Smart Contract Architecture for License Management and Digital Signatu
 \author{
   \IEEEauthorblockN{Virobit Research}
   \IEEEauthorblockA{
-    Project P-18 --- Cardano Blockchain License \& Signature System\\
-    February 2026 --- v2.0
+    Cardano Blockchain License \& Signature System\\
+    February 2026 --- v3.0
   }
 }
 
@@ -173,7 +173,7 @@ This paper makes the following contributions:
   \item \textbf{Architecture}: A complete credential verification system combining Cardano-native NFTs (CIP-25), Plutus V2 minting policies, multi-signature collection validators, and dues enforcement contracts.
   \item \textbf{Gap Analysis}: Systematic comparison with eight existing blockchain credential systems demonstrating that no existing system provides the proposed combination of capabilities.
   \item \textbf{Legal Compliance}: Analysis of compliance with the ESIGN Act, UETA, eIDAS 2.0, and GDPR, with specific architectural decisions motivated by regulatory requirements.
-  \item \textbf{Implementation}: A working implementation using PyCardano with 438 passing tests, demonstrating practical feasibility.\footnote{Complementary to Veridian ACDC (Apr 2025) which uses off-chain VCs + optional ledger hash anchoring~\cite{veridian2025}.}
+  \item \textbf{Implementation}: A working implementation using PyCardano with 660 passing tests, demonstrating practical feasibility.\footnote{Complementary to Veridian ACDC (Apr 2025) which uses off-chain VCs + optional ledger hash anchoring~\cite{veridian2025}.}
 \end{enumerate}
 
 \subsection{Paper Organization}
@@ -255,13 +255,13 @@ The system operates across three layers: (1)~the Cardano blockchain for token cu
 \centering
 \begin{tikzpicture}[scale=0.78, every node/.style={transform shape}]
   % User Interface Layer
-  \node[archbox, fill=blue!8, minimum width=2.2cm] (ui1) at (-2.8,7.8) {FastAPI\\Dashboard};
-  \node[archbox, fill=blue!8, minimum width=2.2cm] (ui2) at (0,7.8) {Telegram\\Bot};
+  \node[archbox, fill=blue!8, minimum width=2.2cm] (ui1) at (-2.8,7.8) {Web\\Dashboard};
+  \node[archbox, fill=blue!8, minimum width=2.2cm] (ui2) at (0,7.8) {Python\\API};
   \node[archbox, fill=blue!8, minimum width=2.2cm] (ui3) at (2.8,7.8) {CLI\\Commands};
 
   % Application Layer
   \node[archbox, fill=green!8, minimum width=3cm] (app1) at (-1.6,6) {cardano\_license\\Wallet / Minting\\Smart Contracts};
-  \node[archbox, fill=green!8, minimum width=3cm] (app2) at (1.9,6) {cardano\_tx\_utils\\Build / Transfer\\UTxO Selection};
+  \node[archbox, fill=green!8, minimum width=3cm] (app2) at (1.9,6) {tx\_utils\\Build / Transfer\\UTxO Selection};
 
   % SDK Layer
   \node[archboxwide, fill=yellow!8] (sdk) at (0.15,4.2) {PyCardano v0.19.1 SDK\\HDWallet $|$ TransactionBuilder $|$ PlutusV2Script};
@@ -468,7 +468,7 @@ Network selection is configured via the \texttt{CARDANO\_NETWORK} environment va
 
 \subsection{Transaction Utilities}
 
-The \texttt{cardano\_tx\_utils} module provides six transaction-building functions: \texttt{estimate\_fee()}, \texttt{build\_mint\_tx()}, \texttt{build\_transfer\_tx()}, \texttt{build\_multisig\_tx()}, \texttt{submit\_tx()}, and \texttt{wait\_for\_confirmation()}. UTxO selection uses a greedy algorithm with a 200,000 lovelace fee buffer. Maximum transaction size is 16,384 bytes.
+The \texttt{tx\_utils} module provides six transaction-building functions: \texttt{estimate\_fee()}, \texttt{build\_mint\_tx()}, \texttt{build\_transfer\_tx()}, \texttt{build\_multisig\_tx()}, \texttt{submit\_tx()}, and \texttt{wait\_for\_confirmation()}. UTxO selection uses a greedy algorithm with a 200,000 lovelace fee buffer. Maximum transaction size is 16,384 bytes.
 
 \subsection{Database Schema}
 
@@ -476,7 +476,7 @@ Nine tables in SQLite track local state across the credential lifecycle (Table~\
 
 \begin{table}[t]
 \centering
-\caption{Database schema overview (20 indexes, 2 views)}
+\caption{Database schema overview}
 \label{tab:schema}
 \scriptsize
 \begin{tabular}{@{}L{2.8cm}L{4.5cm}@{}}
@@ -489,18 +489,18 @@ blockchain\_signature\_tokens & Signature token balances \\
 blockchain\_validity\_tokens & Time-bounded validity tokens \\
 blockchain\_signatures & Individual document signatures \\
 blockchain\_work\_products & Multi-signer work products \\
-minting\_policies & Authority minting policy registry \\
-signature\_validators & Deployed signature validators \\
+blockchain\_minting\_policies & Authority minting policy registry \\
 dues\_contracts & Dues enforcement contracts \\
+dues\_payments & Dues payment transaction records \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 Mithril snapshot proofs provide a planned extension for light-client enterprise verification, enabling third parties to verify credential state without running a full Cardano node (2026 roadmap).
 
-\subsection{API and Dashboard}
+\subsection{Library API}
 
-Four REST endpoints are exposed via FastAPI: \texttt{/api/blockchain/wallets} (wallet overview), \texttt{/api/blockchain/licenses} (license monitoring), \texttt{/api/blockchain/work-products/\{id\}} (work product tracking), and \texttt{/api/blockchain/verify/\{doc\_hash\}} (signature verification).
+The package exposes a comprehensive Python API for credential lifecycle management: wallet generation (\texttt{generate\_wallet}, \texttt{create\_authority\_wallet}), license minting (\texttt{mint\_license\_nft}, \texttt{build\_cip25\_metadata}), signature operations (\texttt{sign\_document}, \texttt{verify\_signature}), validity management (\texttt{mint\_validity\_token}, \texttt{check\_validity}, \texttt{renew\_validity}), and dues enforcement (\texttt{deploy\_dues\_contract}, \texttt{pay\_dues}). All functions are async and designed for integration with web frameworks, CLI tools, or custom dashboards.
 
 % ============================================================================
 % 5. SECURITY ANALYSIS
@@ -821,7 +821,7 @@ This paper has presented a blockchain-based professional licensing and digital s
 
 \textbf{Limited multi-party workflows} are replaced by signature collection validators that create immutable, timestamped on-chain records linking credentials to signed documents.
 
-The four use case scenarios demonstrate practical applicability across the professions most affected by credential verification failures. With 438 passing tests across wallet management, token operations, smart contract deployment, transaction building, and API endpoints, the implementation demonstrates technical feasibility. Future work prioritizes full Plutus V3 on-chain validators, privacy-preserving credential references via Halo2 ZKP predicates, and W3C Verifiable Credentials interoperability. The architecture is positioned as a production complement to Veridian/Identus for public-record regulated professions (medical, legal, engineering).
+The four use case scenarios demonstrate practical applicability across the professions most affected by credential verification failures. With 660 passing tests across wallet management, token operations, smart contract deployment, and transaction building, the implementation demonstrates technical feasibility. Future work prioritizes full Plutus V3 on-chain validators, privacy-preserving credential references via Halo2 ZKP predicates, and W3C Verifiable Credentials interoperability. The architecture is positioned as a production complement to Veridian/Identus for public-record regulated professions (medical, legal, engineering).
 
 % ============================================================================
 % REFERENCES

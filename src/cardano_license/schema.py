@@ -1,6 +1,6 @@
 """Database schema initialization for cardano-license.
 
-Contains all 10 CREATE TABLE statements. Call init_db() once on first use
+Contains all 9 CREATE TABLE statements. Call init_db() once on first use
 to ensure all tables exist.
 """
 
